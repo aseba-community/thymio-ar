@@ -1,0 +1,4 @@
+[submodule "thymio-vpl2"]
+	path = thymio-vpl2
+	url = https://github.com/aseba-community/thymio-vpl2.git
+	branch = master

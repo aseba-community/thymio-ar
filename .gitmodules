@@ -2,3 +2,11 @@
 	path = thymio-vpl2
 	url = https://github.com/aseba-community/thymio-vpl2.git
 	branch = master
+[submodule "aseba"]
+	path = aseba
+	url = https://github.com/aseba-community/aseba.git
+	branch = master
+[submodule "dashel"]
+	path = dashel
+	url = https://github.com/aseba-community/dashel.git
+	branch = master

@@ -38,14 +38,17 @@ ASEBA_INCLUDE = $$PWD/dashel $$PWD
 ASEBA_CXXFLAGS = -Wno-unused-parameter -Wno-deprecated-declarations
 
 QT += quick multimedia
+CONFIG += c++11
 QMAKE_CXXFLAGS += $$ASEBA_CXXFLAGS
 HEADERS += \
     $$PWD/thymio-ar.h \
-    $$PWD/vision-video-filter.h
+    $$PWD/vision-video-filter.h \
+    $$PWD/aseba.h
 SOURCES += \
+    $$ASEBA_SOURCES \
     $$PWD/thymio-ar.cpp \
     $$PWD/vision-video-filter.cpp \
-    $$ASEBA_SOURCES
+    $$PWD/aseba.cpp
 RESOURCES += $$PWD/thymio-ar.qrc
 DEPENDPATH += $$OPENCV_INCLUDE $$ASEBA_INCLUDE
 INCLUDEPATH += $$OPENCV_INCLUDE $$ASEBA_INCLUDE

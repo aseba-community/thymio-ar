@@ -34,6 +34,14 @@ win32 {
 } else {
     ASEBA_SOURCES += $$PWD/dashel/dashel/dashel-posix.cpp
 }
+android {
+    ASEBA_SOURCES += $$PWD/aseba/transport/dashel_plugins/android.cpp
+    aseba_android.files = $$PWD/android/*
+    aseba_android.path = /
+    INSTALLS += aseba_android
+} else {
+    ASEBA_SOURCES += $$PWD/aseba/transport/dashel_plugins/none.cpp
+}
 ASEBA_INCLUDE = $$PWD/dashel $$PWD
 ASEBA_CXXFLAGS = -Wno-unused-parameter -Wno-deprecated-declarations
 

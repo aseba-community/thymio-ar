@@ -4,12 +4,35 @@
 #include <QDebug>
 #include <sstream>
 
+static const char* exceptionSource(Dashel::DashelException::Source source) {
+	switch(source) {
+	case Dashel::DashelException::SyncError: return "SyncError";
+	case Dashel::DashelException::InvalidTarget: return "InvalidTarget";
+	case Dashel::DashelException::InvalidOperation: return "InvalidOperation";
+	case Dashel::DashelException::ConnectionLost: return "ConnectionLost";
+	case Dashel::DashelException::IOError: return "IOError";
+	case Dashel::DashelException::ConnectionFailed: return "ConnectionFailed";
+	case Dashel::DashelException::EnumerationError: return "EnumerationError";
+	case Dashel::DashelException::PreviousIncomingDataNotRead: return "PreviousIncomingDataNotRead";
+	case Dashel::DashelException::Unknown: return "Unknown";
+	}
+	qFatal("undeclared dashel exception source %i", source);
+}
+
 void DashelHub::connect(QString target) {
-	Dashel::Hub::connect(target.toStdString());
+	try {
+		Dashel::Hub::connect(target.toStdString());
+	} catch(Dashel::DashelException& e) {
+		qFatal("DashelException(%s, %s, %s, %p)", exceptionSource(e.source), strerror(e.sysError), e.what(), e.stream);
+	}
 }
 
 void DashelHub::run() {
-	Dashel::Hub::run();
+	try {
+		Dashel::Hub::run();
+	} catch(Dashel::DashelException& e) {
+		qFatal("DashelException(%s, %s, %s, %p)", exceptionSource(e.source), strerror(e.sysError), e.what(), e.stream);
+	}
 }
 
 AsebaClient::AsebaClient() {
@@ -17,8 +40,8 @@ AsebaClient::AsebaClient() {
 
 	QObject::connect(&hub, &DashelHub::connectionCreated, &hub, [this](Dashel::Stream* stream) {
 		this->stream = stream;
-		Aseba::GetDescription().serialize(stream);
-		stream->flush();
+		Aseba::GetDescription message;
+		send(&message);
 	}, Qt::DirectConnection);
 
 	QObject::connect(&hub, &DashelHub::incomingData, &hub, [this](Dashel::Stream* stream) {
@@ -45,7 +68,7 @@ AsebaClient::AsebaClient() {
 
 	QObject::connect(&manager, &AsebaDescriptionsManager::nodeDescriptionReceived, this, [this](unsigned nodeId) {
 		auto description = manager.getDescription(nodeId);
-		nodes.append(new AsebaNode(this, description));
+		nodes.append(new AsebaNode(this, nodeId, description));
 		emit this->nodesChanged();
 	});
 
@@ -66,5 +89,19 @@ void AsebaClient::start(QString target) {
 void AsebaClient::send(Aseba::Message* message) {
 	if (stream) {
 		message->serialize(stream);
+		stream->flush();
 	}
+}
+
+AsebaNode::AsebaNode(AsebaClient* parent, unsigned nodeId, const Aseba::TargetDescription* description)
+	: QObject(parent), nodeId(nodeId), description(*description) {
+	unsigned dummy;
+	variablesMap = description->getVariablesMap(dummy);
+}
+
+void AsebaNode::setVariable(QString name, QList<int> value) {
+	uint16 start = variablesMap[name.toStdWString()].first;
+	Aseba::SetVariables::VariablesVector variablesVector(value.begin(), value.end());
+	Aseba::SetVariables message(nodeId, start, variablesVector);
+	parent()->send(&message);
 }

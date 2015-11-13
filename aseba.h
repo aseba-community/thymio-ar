@@ -47,10 +47,15 @@ signals:
 class AsebaNode: public QObject {
 	Q_OBJECT
 	Q_PROPERTY(QString name READ name CONSTANT)
+	unsigned nodeId;
 	Aseba::TargetDescription description;
+	Aseba::VariablesMap variablesMap;
 public:
-	explicit AsebaNode(AsebaClient* parent, const Aseba::TargetDescription* description): QObject(parent), description(*description) {}
+	explicit AsebaNode(AsebaClient* parent, unsigned nodeId, const Aseba::TargetDescription* description);
+	AsebaClient* parent() const { return static_cast<AsebaClient*>(QObject::parent()); }
 	QString name() { return QString::fromStdWString(description.name); }
+public slots:
+	void setVariable(QString name, QList<int> value);
 };
 
 #endif // ASEBA_CLIENT_H

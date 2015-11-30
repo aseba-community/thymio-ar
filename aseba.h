@@ -19,7 +19,7 @@ signals:
 class AsebaDescriptionsManager: public QObject, public Aseba::DescriptionsManager {
 	Q_OBJECT
 signals:
-	void nodeProtocolVersionMismatch(const std::wstring &nodeName, uint16 protocolVersion) Q_DECL_OVERRIDE;
+	void nodeProtocolVersionMismatch(unsigned nodeId, const std::wstring &nodeName, uint16 protocolVersion) Q_DECL_OVERRIDE;
 	void nodeDescriptionReceived(unsigned nodeId) Q_DECL_OVERRIDE;
 };
 

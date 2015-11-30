@@ -40,8 +40,14 @@ AsebaClient::AsebaClient() {
 
 	QObject::connect(&hub, &DashelHub::connectionCreated, &hub, [this](Dashel::Stream* stream) {
 		this->stream = stream;
-		Aseba::GetDescription message;
-		send(&message);
+		{
+			Aseba::GetDescription message;
+			send(&message);
+		}
+		{
+			Aseba::ListNodes message;
+			send(&message);
+		}
 	}, Qt::DirectConnection);
 
 	QObject::connect(&hub, &DashelHub::incomingData, &hub, [this](Dashel::Stream* stream) {
@@ -54,6 +60,12 @@ AsebaClient::AsebaClient() {
 		qDebug() << "received" << QString::fromStdWString(dump.str());
 
 		switch (message->type) {
+		case ASEBA_MESSAGE_NODE_PRESENT:
+			if (manager.getDescription(message->source) == nullptr) {
+				Aseba::GetNodeDescription response(message->source);
+				send(&response);
+			}
+			break;
 		case ASEBA_MESSAGE_DESCRIPTION:
 		case ASEBA_MESSAGE_NAMED_VARIABLE_DESCRIPTION:
 		case ASEBA_MESSAGE_LOCAL_EVENT_DESCRIPTION:

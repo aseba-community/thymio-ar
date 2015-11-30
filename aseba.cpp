@@ -117,3 +117,31 @@ void AsebaNode::setVariable(QString name, QList<int> value) {
 	Aseba::SetVariables message(nodeId, start, variablesVector);
 	parent()->send(&message);
 }
+
+void AsebaNode::setProgram(QString source) {
+	Aseba::Compiler compiler;
+	compiler.setTargetDescription(&description);
+	Aseba::CommonDefinitions commonDefinitions;
+	compiler.setCommonDefinitions(&commonDefinitions);
+
+	std::wistringstream input(source.toStdWString());
+	Aseba::BytecodeVector bytecode;
+	unsigned allocatedVariablesCount;
+	Aseba::Error error;
+	bool result = compiler.compile(input, bytecode, allocatedVariablesCount, error);
+
+	if (!result) {
+		qWarning() << QString::fromStdWString(error.toWString());
+		return;
+	}
+
+	std::vector<Aseba::Message*> messages;
+	Aseba::sendBytecode(messages, nodeId, std::vector<uint16>(bytecode.begin(), bytecode.end()));
+	foreach (auto message, messages) {
+		parent()->send(message);
+		delete message;
+	}
+
+	Aseba::Run run(nodeId);
+	parent()->send(&run);
+}

@@ -3,6 +3,7 @@ import ThymioAR 1.0
 
 Item {
     property var variables: ({})
+    property string program: ""
 
     property var node: {
         for (var i = 0; i < aseba.nodes.length; ++i) {
@@ -13,8 +14,12 @@ Item {
         }
     }
 
-    onNodeChanged: setVariables()
+    onNodeChanged: {
+        setVariables();
+        setProgram();
+    }
     onVariablesChanged: setVariables()
+    onProgramChanged: setProgram()
 
     function setVariables() {
         if (node) {
@@ -25,6 +30,12 @@ Item {
                 }
                 node.setVariable(name, value);
             })
+        }
+    }
+
+    function setProgram() {
+        if (node) {
+            node.setProgram(program);
         }
     }
 }

@@ -8,8 +8,7 @@
 class DashelHub: public QObject, public Dashel::Hub {
 	Q_OBJECT
 public slots:
-	void connect(QString target);
-	void run();
+	void start(QString target);
 signals:
 	void connectionCreated(Dashel::Stream* stream) Q_DECL_OVERRIDE;
 	void incomingData(Dashel::Stream* stream) Q_DECL_OVERRIDE;

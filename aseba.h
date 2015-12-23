@@ -14,6 +14,7 @@ signals:
 	void connectionCreated(Dashel::Stream* stream) Q_DECL_OVERRIDE;
 	void incomingData(Dashel::Stream* stream) Q_DECL_OVERRIDE;
 	void connectionClosed(Dashel::Stream* stream, bool abnormal) Q_DECL_OVERRIDE;
+	void error(QString source, QString reason);
 };
 
 class AsebaDescriptionsManager: public QObject, public Aseba::DescriptionsManager {
@@ -42,6 +43,7 @@ public slots:
 signals:
 	void message(Aseba::Message*);
 	void nodesChanged();
+	void connectionError(QString source, QString reason);
 };
 
 class AsebaNode: public QObject {

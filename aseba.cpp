@@ -23,7 +23,10 @@ void DashelHub::connect(QString target) {
 	try {
 		Dashel::Hub::connect(target.toStdString());
 	} catch(Dashel::DashelException& e) {
-		qFatal("DashelException(%s, %s, %s, %p)", exceptionSource(e.source), strerror(e.sysError), e.what(), e.stream);
+		const char* source(exceptionSource(e.source));
+		const char* reason(e.what());
+		qWarning("DashelException(%s, %s, %s, %p)", source, strerror(e.sysError), reason, e.stream);
+		emit error(source, reason);
 	}
 }
 
@@ -31,7 +34,10 @@ void DashelHub::run() {
 	try {
 		Dashel::Hub::run();
 	} catch(Dashel::DashelException& e) {
-		qFatal("DashelException(%s, %s, %s, %p)", exceptionSource(e.source), strerror(e.sysError), e.what(), e.stream);
+		const char* source(exceptionSource(e.source));
+		const char* reason(e.what());
+		qWarning("DashelException(%s, %s, %s, %p)", source, strerror(e.sysError), reason, e.stream);
+		emit error(source, reason);
 	}
 }
 
@@ -77,6 +83,8 @@ AsebaClient::AsebaClient() {
 
 		emit this->message(message);
 	}, Qt::DirectConnection);
+
+	QObject::connect(&hub, &DashelHub::error, this, &AsebaClient::connectionError, Qt::QueuedConnection);
 
 	QObject::connect(&manager, &AsebaDescriptionsManager::nodeDescriptionReceived, this, [this](unsigned nodeId) {
 		auto description = manager.getDescription(nodeId);

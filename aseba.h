@@ -3,6 +3,7 @@
 
 #include <QThread>
 #include "dashel/dashel.h"
+#include "aseba/common/msg/msg.h"
 #include "aseba/common/msg/descriptions-manager.h"
 
 class DashelHub: public QObject, public Dashel::Hub {
@@ -40,7 +41,7 @@ public slots:
 	void start(QString target = ASEBA_DEFAULT_TARGET);
 	void send(Aseba::Message*);
 signals:
-	void message(Aseba::Message*);
+	void userMessage(unsigned type, QList<int> data);
 	void nodesChanged();
 	void connectionError(QString source, QString reason);
 };

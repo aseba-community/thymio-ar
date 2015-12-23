@@ -4,6 +4,23 @@
 #include <QDebug>
 #include <sstream>
 
+std::vector<sint16> toAsebaVector(const QList<int>& values)
+{
+	std::vector<sint16> data;
+	data.reserve(values.size());
+	for (int i = 0; i < values.size(); ++i)
+		data.push_back(values[i]);
+	return data;
+}
+
+QList<int> fromAsebaVector(const std::vector<sint16>& values)
+{
+	QList<int> data;
+	for (size_t i = 0; i < values.size(); ++i)
+		data.push_back(values[i]);
+	return data;
+}
+
 static const char* exceptionSource(Dashel::DashelException::Source source) {
 	switch(source) {
 	case Dashel::DashelException::SyncError: return "SyncError";
@@ -70,9 +87,13 @@ AsebaClient::AsebaClient() {
 		case ASEBA_MESSAGE_DISCONNECTED:
 			manager.processMessage(message);
 			break;
+		default: {
+				Aseba::UserMessage* userMessage(dynamic_cast<Aseba::UserMessage*>(message));
+				if (userMessage)
+					emit this->userMessage(userMessage->type, fromAsebaVector(userMessage->data));
+			}
 		}
 
-		emit this->message(message);
 	}, Qt::DirectConnection);
 
 	QObject::connect(&hub, &DashelHub::error, this, &AsebaClient::connectionError, Qt::QueuedConnection);

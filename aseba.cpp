@@ -122,6 +122,8 @@ void AsebaNode::setProgram(QString source) {
 	Aseba::Compiler compiler;
 	compiler.setTargetDescription(&description);
 	Aseba::CommonDefinitions commonDefinitions;
+	commonDefinitions.events.push_back(Aseba::NamedValue(L"block", 1));
+	commonDefinitions.events.push_back(Aseba::NamedValue(L"link", 2));
 	compiler.setCommonDefinitions(&commonDefinitions);
 
 	std::wistringstream input(source.toStdWString());
@@ -132,6 +134,7 @@ void AsebaNode::setProgram(QString source) {
 
 	if (!result) {
 		qWarning() << QString::fromStdWString(error.toWString());
+		qWarning() << source;
 		return;
 	}
 

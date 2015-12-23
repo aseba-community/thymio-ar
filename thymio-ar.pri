@@ -6,7 +6,7 @@ android {
     !defined(OPENCV_SRC,var):warning(undefined OPENCV_SRC variable)
     !defined(OPENCV_BIN,var):warning(undefined OPENCV_BIN variable)
     OPENCV_INCLUDE = $$OPENCV_SRC/modules/hal/include $$OPENCV_SRC/modules/core/include $$OPENCV_SRC/modules/imgproc/include
-    OPENCV_LIBS = -L$$OPENCV_BIN/lib -lopencv_imgproc -lopencv_core -lopencv_hal
+	OPENCV_LIBS = -L$$OPENCV_BIN/lib -lopencv_imgproc -lopencv_core
 }
 
 ASEBA_SOURCES = \

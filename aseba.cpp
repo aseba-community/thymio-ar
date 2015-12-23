@@ -6,16 +6,13 @@
 
 std::vector<sint16> toAsebaVector(const QList<int>& values)
 {
-	std::vector<sint16> data;
-	data.reserve(values.size());
-	for (int i = 0; i < values.size(); ++i)
-		data.push_back(values[i]);
-	return data;
+	return std::vector<sint16>(values.begin(), values.end());
 }
 
 QList<int> fromAsebaVector(const std::vector<sint16>& values)
 {
 	QList<int> data;
+	data.reserve(values.size());
 	for (size_t i = 0; i < values.size(); ++i)
 		data.push_back(values[i]);
 	return data;

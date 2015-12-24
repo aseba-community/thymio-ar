@@ -36,20 +36,11 @@ static const char* exceptionSource(Dashel::DashelException::Source source) {
 	qFatal("undeclared dashel exception source %i", source);
 }
 
-void DashelHub::connect(QString target) {
+void DashelHub::start(QString target) {
 	try {
-		Dashel::Hub::connect(target.toStdString());
-	} catch(Dashel::DashelException& e) {
-		const char* source(exceptionSource(e.source));
-		const char* reason(e.what());
-		qWarning("DashelException(%s, %s, %s, %p)", source, strerror(e.sysError), reason, e.stream);
-		emit error(source, reason);
-	}
-}
-
-void DashelHub::run() {
-	try {
-		Dashel::Hub::run();
+		auto closeStream = [this](Dashel::Stream* stream) { return this->closeStream(stream); };
+		std::unique_ptr<Dashel::Stream, decltype(closeStream)> stream(Dashel::Hub::connect(target.toStdString()), closeStream);
+		run();
 	} catch(Dashel::DashelException& e) {
 		const char* source(exceptionSource(e.source));
 		const char* reason(e.what());
@@ -123,8 +114,7 @@ AsebaClient::~AsebaClient() {
 }
 
 void AsebaClient::start(QString target) {
-	QMetaObject::invokeMethod(&hub, "connect", Qt::QueuedConnection, Q_ARG(QString, target));
-	QMetaObject::invokeMethod(&hub, "run", Qt::QueuedConnection);
+	QMetaObject::invokeMethod(&hub, "start", Qt::QueuedConnection, Q_ARG(QString, target));
 }
 
 void AsebaClient::send(Aseba::Message* message) {

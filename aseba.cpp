@@ -13,8 +13,8 @@ QList<int> fromAsebaVector(const std::vector<sint16>& values)
 {
 	QList<int> data;
 	data.reserve(values.size());
-	for (size_t i = 0; i < values.size(); ++i)
-		data.push_back(values[i]);
+	for (auto value = values.begin(); value != values.end(); ++value)
+		data.push_back(*value);
 	return data;
 }
 
@@ -35,13 +35,16 @@ static const char* exceptionSource(Dashel::DashelException::Source source) {
 
 void DashelHub::start(QString target) {
 	try {
-		auto closeStream = [this](Dashel::Stream* stream) { return this->closeStream(stream); };
+		auto closeStream = [this](Dashel::Stream* stream) {
+			if (dataStreams.find(stream) != dataStreams.end())
+				Dashel::Hub::closeStream(stream);
+		};
 		std::unique_ptr<Dashel::Stream, decltype(closeStream)> stream(Dashel::Hub::connect(target.toStdString()), closeStream);
 		run();
 	} catch(Dashel::DashelException& e) {
 		const char* source(exceptionSource(e.source));
 		const char* reason(e.what());
-		qWarning("DashelException(%s, %s, %s, %p)", source, strerror(e.sysError), reason, e.stream);
+		qWarning("DashelException(%s, %i, %s, %s, %p)", source, e.sysError, strerror(e.sysError), reason, e.stream);
 		emit error(source, reason);
 	}
 }
@@ -59,6 +62,11 @@ AsebaClient::AsebaClient() {
 			Aseba::ListNodes message;
 			send(&message);
 		}
+	}, Qt::DirectConnection);
+
+	QObject::connect(&hub, &DashelHub::connectionClosed, &hub, [this](Dashel::Stream* stream, bool abnormal) {
+		emit hub.error("ConnectionClosed", abnormal ? "abnormal" : "normal");
+		hub.stop();
 	}, Qt::DirectConnection);
 
 	QObject::connect(&hub, &DashelHub::incomingData, &hub, [this](Dashel::Stream* stream) {
@@ -93,7 +101,16 @@ AsebaClient::AsebaClient() {
 
 	}, Qt::DirectConnection);
 
-	QObject::connect(&hub, &DashelHub::error, this, &AsebaClient::connectionError, Qt::QueuedConnection);
+	QObject::connect(&hub, &DashelHub::error, this, [this](QString source, QString reason) {
+		stream = nullptr;
+		manager.reset();
+		foreach (auto node, nodes) {
+			delete node;
+		}
+		nodes.clear();
+		emit this->nodesChanged();
+		emit this->connectionError(source,reason);
+	}, Qt::QueuedConnection);
 
 	QObject::connect(&manager, &AsebaDescriptionsManager::nodeDescriptionReceived, this, [this](unsigned nodeId) {
 		auto description = manager.getDescription(nodeId);

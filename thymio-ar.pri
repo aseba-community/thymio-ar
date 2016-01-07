@@ -1,7 +1,7 @@
 android {
     !defined(OPENCV_SDK,var):error(undefined OPENCV_SDK variable)
     OPENCV_INCLUDE = $$OPENCV_SDK/sdk/native/jni/include
-    OPENCV_LIBS = -L$$OPENCV_SDK/sdk/native/3rdparty/libs/armeabi-v7a -L$$OPENCV_SDK/sdk/native/libs/armeabi-v7a -Wl,--start-group -lopencv_imgproc -lopencv_core -lopencv_hal -ltbb -Wl,--end-group
+    OPENCV_LIBS = -L$$OPENCV_SDK/sdk/native/3rdparty/libs/armeabi-v7a -L$$OPENCV_SDK/sdk/native/libs/armeabi-v7a -Wl,--start-group -lopencv_imgproc -lopencv_core -ltbb -Wl,--end-group
 } else {
     !defined(OPENCV_SRC,var):warning(undefined OPENCV_SRC variable)
     !defined(OPENCV_BIN,var):warning(undefined OPENCV_BIN variable)

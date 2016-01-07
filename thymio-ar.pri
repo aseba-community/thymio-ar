@@ -33,6 +33,10 @@ win32 {
     ASEBA_SOURCES += $$PWD/dashel/dashel/dashel-win32.cpp
 } else {
     ASEBA_SOURCES += $$PWD/dashel/dashel/dashel-posix.cpp
+    macx {
+        ASEBA_SOURCES += $$PWD/dashel/dashel/poll_emu.c
+        ASEBA_LIBS = -framework CoreFoundation
+    }
 }
 android {
     ASEBA_SOURCES += $$PWD/aseba/transport/dashel_plugins/android.cpp
@@ -60,6 +64,6 @@ SOURCES += \
 RESOURCES += $$PWD/thymio-ar.qrc
 DEPENDPATH += $$OPENCV_INCLUDE $$ASEBA_INCLUDE
 INCLUDEPATH += $$OPENCV_INCLUDE $$ASEBA_INCLUDE
-LIBS += $$OPENCV_LIBS
+LIBS += $$OPENCV_LIBS $$ASEBA_LIBS
 
 include(thymio-vpl2/thymio-vpl2.pri)

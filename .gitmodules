@@ -10,3 +10,7 @@
 	path = dashel
 	url = https://github.com/aseba-community/dashel.git
 	branch = master
+[submodule "thymio-tracker"]
+	path = thymio-tracker
+	url = https://github.com/aseba-community/thymio-tracker.git
+	branch = master

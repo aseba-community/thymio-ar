@@ -1,21 +1,19 @@
-import QtQuick 2.0
+import QtQuick 2.5
 import ThymioAR 1.0
-import QtMultimedia 5.4
+import QtMultimedia 5.5
 
 Item {
-    Component.onCompleted: {
-        source.start()
-    }
-    Camera {
-        id: source
-        captureMode: Camera.CaptureViewfinder
-    }
-    VisionVideoFilter {
-        id: visionVideoFilter
-    }
-    VideoOutput {
-        anchors.fill: parent
-        source: source
-        filters: [ visionVideoFilter ]
-    }
+	Camera {
+		id: source
+		captureMode: Camera.CaptureViewfinder
+	}
+	VisionVideoFilter {
+		id: visionVideoFilter
+		onUpdated: console.warn(robotFound, robotPose)
+	}
+	VideoOutput {
+		anchors.fill: parent
+		source: source
+		filters: [ visionVideoFilter ]
+	}
 }

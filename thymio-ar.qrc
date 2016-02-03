@@ -3,5 +3,7 @@
         <file>Vision.qml</file>
         <file>Aseba.qml</file>
         <file>Thymio.qml</file>
+        <file alias="calibration.xml">thymio-tracker/data/calibration/embedded_camera_calib.xml</file>
+        <file alias="geomHashing.dat">thymio-tracker/data/GHscale_Arth_Perspective.dat</file>
     </qresource>
 </RCC>

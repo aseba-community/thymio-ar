@@ -69,43 +69,54 @@ Tracker::Tracker(VisionVideoFilter* filter, cv::FileStorage& calibration, std::i
 		: filter(filter), tracker(calibration, geomHashing) {
 }
 
+static int getCvMatType(QVideoFrame::PixelFormat pixelFormat) {
+	switch(pixelFormat) {
+	case QVideoFrame::Format_YUV420P:
+		return CV_8UC1;
+	case QVideoFrame::Format_BGR32:
+		return CV_8UC4;
+	default:
+		qCritical() << pixelFormat;
+		qFatal("unknown pixel format");
+	}
+}
+
+static void convert(QVideoFrame::PixelFormat pixelFormat, cv::Mat& input, cv::Mat& output) {
+	switch(pixelFormat) {
+	case QVideoFrame::Format_YUV420P:
+		return input.copyTo(output);
+	case QVideoFrame::Format_BGR32:
+		return cv::cvtColor(input, output, cv::COLOR_BGRA2GRAY, CV_8UC1);
+	default:
+		qCritical() << pixelFormat;
+		qFatal("unknown pixel format");
+	}
+}
+
 void Tracker::send(QVideoFrame* inputFrame) {
 	inputFrame->map(QAbstractVideoBuffer::ReadOnly);
 
 	auto pixelFormat(inputFrame->pixelFormat());
-	auto conversion(conversionFromPixelFormat(pixelFormat));
+	auto matType(getCvMatType(pixelFormat));
 
 	auto bits(inputFrame->bits());
 	auto bytesPerLine(inputFrame->bytesPerLine());
-	auto lines(inputFrame->mappedBytes() / bytesPerLine);
+	auto lines(inputFrame->height());
 	auto width(inputFrame->width());
 
-	//qWarning() << bytesPerLine << lines << width << height;
-
-	cv::Mat inputMat(lines, width, conversion.inputType, bits, bytesPerLine);
+	//qWarning() << pixelFormat << matType << bits << bytesPerLine << lines << width;
+	cv::Mat inputMat(lines, width, matType, bits, bytesPerLine);
 	//qWarning() << inputMat.type() << inputMat.cols << inputMat.rows << inputMat.step;
 
 	auto& buffer(buffers.writeBuffer());
 
-	cv::cvtColor(inputMat, buffer, conversion.conversion);
+	convert(pixelFormat, inputMat, buffer);
 	//qWarning() << buffer.type() << buffer.cols << buffer.rows << buffer.step;
 
 	inputFrame->unmap();
 
 	if (!buffers.writeSwap()) {
 		QMetaObject::invokeMethod(this, "step", Qt::QueuedConnection);
-	}
-}
-
-Tracker::Conversion Tracker::conversionFromPixelFormat(QVideoFrame::PixelFormat pixelFormat) {
-	switch(pixelFormat) {
-	case QVideoFrame::Format_YUV420P:
-		return Conversion(CV_8UC1, cv::COLOR_YUV420p2RGBA);
-	case QVideoFrame::Format_BGR32:
-		return Conversion(CV_8UC4, cv::COLOR_BGRA2RGBA);
-	default:
-		qCritical() << pixelFormat;
-		qFatal("unknown pixel format");
 	}
 }
 

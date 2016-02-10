@@ -2,7 +2,10 @@ import QtQuick 2.0
 import ThymioAR 1.0
 
 Item {
-	property string target: Qt.platform.os === "android" ? "android:" : "tcp:localhost;33333" //"ser:device=/dev/ttyACM0"
+	property string target: Qt.platform.os === "android" ? "android:" : Qt.platform.os === "osx" ? "ser:name=Thymio-II" : "ser:device=/dev/ttyACM0"
+	//property string target: "ser:name=Thymio-II"
+	//property string target: "ser:device=/dev/ttyACM0"
+	//property string target: "tcp:localhost;33333"
 	property alias nodes: client.nodes
 	signal userMessage(int type, var data)
 

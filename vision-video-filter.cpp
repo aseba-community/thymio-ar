@@ -53,13 +53,8 @@ public:
 public slots:
 	void step();
 private:
-	struct Conversion {
-		int inputType;
-		cv::ColorConversionCodes conversion;
-		Conversion(int inputType, cv::ColorConversionCodes conversion): inputType(inputType), conversion(conversion) {}
-	};
-	static Conversion conversionFromPixelFormat(QVideoFrame::PixelFormat);
 	VisionVideoFilter* filter;
+	cv::Mat resized;
 	TripleBuffer<cv::Mat> buffers;
 	QVideoFrame* free;
 	thymio_tracker::ThymioTracker tracker;
@@ -67,53 +62,97 @@ private:
 
 Tracker::Tracker(VisionVideoFilter* filter, cv::FileStorage& calibration, std::istream& geomHashing)
 		: filter(filter), tracker(calibration, geomHashing) {
+	buffers.writeBuffer().create(480, 640, CV_8UC1);
+	buffers.readBuffer().create(480, 640, CV_8UC1);
+	buffers.readSwap();
+	buffers.readBuffer().create(480, 640, CV_8UC1);
 }
 
-static int getCvMatType(QVideoFrame::PixelFormat pixelFormat) {
+static int getCvType(QVideoFrame::PixelFormat pixelFormat) {
 	switch(pixelFormat) {
-	case QVideoFrame::Format_YUV420P:
-		return CV_8UC1;
+	case QVideoFrame::Format_ARGB32:
+		return CV_8UC4;
+	case QVideoFrame::Format_ARGB32_Premultiplied:
+		return CV_8UC4;
+	case QVideoFrame::Format_RGB32:
+		return CV_8UC4;
+	case QVideoFrame::Format_RGB24:
+		return CV_8UC3;
+	case QVideoFrame::Format_RGB565:
+		return CV_8UC2;
+	case QVideoFrame::Format_RGB555:
+		return CV_8UC2;
+	case QVideoFrame::Format_ARGB8565_Premultiplied:
+		return CV_8UC3;
+	case QVideoFrame::Format_BGRA32:
+		return CV_8UC4;
+	case QVideoFrame::Format_BGRA32_Premultiplied:
+		return CV_8UC4;
 	case QVideoFrame::Format_BGR32:
 		return CV_8UC4;
-	default:
-		qCritical() << pixelFormat;
-		qFatal("unknown pixel format");
-	}
-}
-
-static void convert(QVideoFrame::PixelFormat pixelFormat, cv::Mat& input, cv::Mat& output) {
-	switch(pixelFormat) {
+	case QVideoFrame::Format_BGR24:
+		return CV_8UC3;
+	case QVideoFrame::Format_BGR565:
+		return CV_8UC2;
+	case QVideoFrame::Format_BGR555:
+		return CV_8UC2;
+	case QVideoFrame::Format_BGRA5658_Premultiplied:
+		return CV_8UC3;
 	case QVideoFrame::Format_YUV420P:
-		return input.copyTo(output);
-	case QVideoFrame::Format_BGR32:
-		return cv::cvtColor(input, output, cv::COLOR_BGRA2GRAY, CV_8UC1);
+		return CV_8UC1;
 	default:
 		qCritical() << pixelFormat;
 		qFatal("unknown pixel format");
 	}
 }
 
-void Tracker::send(QVideoFrame* inputFrame) {
-	inputFrame->map(QAbstractVideoBuffer::ReadOnly);
+static cv::ColorConversionCodes getCvtCode(QVideoFrame::PixelFormat pixelFormat) {
+	switch (pixelFormat) {
+	case QVideoFrame::Format_BGR32:
+		return cv::COLOR_BGRA2GRAY;
+	case QVideoFrame::Format_YUV420P:
+		// no conversion: just take the Y
+		return cv::COLOR_COLORCVT_MAX;
+	default:
+		qCritical() << pixelFormat;
+		qFatal("unknown pixel format");
+	}
+}
 
-	auto pixelFormat(inputFrame->pixelFormat());
-	auto matType(getCvMatType(pixelFormat));
+void Tracker::send(QVideoFrame* frame) {
+	auto& output(buffers.writeBuffer());
 
-	auto bits(inputFrame->bits());
-	auto bytesPerLine(inputFrame->bytesPerLine());
-	auto lines(inputFrame->height());
-	auto width(inputFrame->width());
+	auto pixelFormat(frame->pixelFormat());
+	auto size(frame->size());
+	auto height(size.height());
+	auto width(size.width());
+	//qWarning() << pixelFormat << height << width;
 
-	//qWarning() << pixelFormat << matType << bits << bytesPerLine << lines << width;
-	cv::Mat inputMat(lines, width, matType, bits, bytesPerLine);
-	//qWarning() << inputMat.type() << inputMat.cols << inputMat.rows << inputMat.step;
+	frame->map(QAbstractVideoBuffer::ReadOnly);
 
-	auto& buffer(buffers.writeBuffer());
+	auto inputType(getCvType(pixelFormat));
+	auto cvtCode(getCvtCode(pixelFormat));
 
-	convert(pixelFormat, inputMat, buffer);
-	//qWarning() << buffer.type() << buffer.cols << buffer.rows << buffer.step;
+	auto bits(frame->bits());
+	auto bytesPerLine(frame->bytesPerLine());
 
-	inputFrame->unmap();
+	//qWarning() << inputType << bits << bytesPerLine;
+	auto input(cv::Mat(height, width, inputType, bits, bytesPerLine));
+
+	auto resize(input.size() != output.size());
+	auto convert(cvtCode != cv::COLOR_COLORCVT_MAX);
+	if (resize && convert) {
+		cv::resize(input, resized, output.size());
+		cv::cvtColor(resized, output, cvtCode, output.type());
+	} else if (resize) {
+		cv::resize(input, output, output.size());
+	} else if (convert) {
+		cv::cvtColor(input, output, cvtCode, output.type());
+	} else {
+		input.copyTo(output);
+	}
+
+	frame->unmap();
 
 	if (!buffers.writeSwap()) {
 		QMetaObject::invokeMethod(this, "step", Qt::QueuedConnection);
@@ -122,7 +161,9 @@ void Tracker::send(QVideoFrame* inputFrame) {
 
 void Tracker::step() {
 	buffers.readSwap();
-	tracker.update(buffers.readBuffer());
+	auto& buffer(buffers.readBuffer());
+	//qWarning() << buffer.type() << buffer.cols << buffer.rows << buffer.step;
+	tracker.update(buffer);
 
 	auto& detection(tracker.getDetectionInfo());
 	auto robotFound(detection.robotFound);

@@ -3,6 +3,7 @@
 
 #include <QAbstractVideoFilter>
 #include <QMatrix4x4>
+#include <QtSensors/QRotationSensor>
 
 class VisionVideoFilter : public QAbstractVideoFilter {
     Q_OBJECT
@@ -13,6 +14,7 @@ public:
 	QVideoFilterRunnable* createFilterRunnable();
 	bool robotFound;
 	QMatrix4x4 robotPose;
+	QRotationSensor rotation;
 signals:
 	void updated();
 };

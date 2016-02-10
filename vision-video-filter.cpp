@@ -10,6 +10,11 @@
 
 #include "thymio-tracker/src/ThymioTracker.h"
 
+const auto nan(std::numeric_limits<double>::quiet_NaN());
+
+
+
+
 template<typename T>
 class TripleBuffer {
 public:
@@ -45,6 +50,9 @@ private:
 	index_t read;
 };
 
+
+
+
 class Tracker : public QObject {
 	Q_OBJECT
 public:
@@ -55,17 +63,17 @@ public slots:
 private:
 	VisionVideoFilter* filter;
 	cv::Mat resized;
-	TripleBuffer<cv::Mat> buffers;
+	TripleBuffer<std::pair<cv::Mat, cv::Vec3d>> buffers;
 	QVideoFrame* free;
 	thymio_tracker::ThymioTracker tracker;
 };
 
 Tracker::Tracker(VisionVideoFilter* filter, cv::FileStorage& calibration, std::istream& geomHashing)
 		: filter(filter), tracker(calibration, geomHashing) {
-	buffers.writeBuffer().create(480, 640, CV_8UC1);
-	buffers.readBuffer().create(480, 640, CV_8UC1);
+	buffers.writeBuffer().first.create(480, 640, CV_8UC1);
+	buffers.readBuffer().first.create(480, 640, CV_8UC1);
 	buffers.readSwap();
-	buffers.readBuffer().create(480, 640, CV_8UC1);
+	buffers.readBuffer().first.create(480, 640, CV_8UC1);
 }
 
 static int getCvType(QVideoFrame::PixelFormat pixelFormat) {
@@ -119,40 +127,49 @@ static cv::ColorConversionCodes getCvtCode(QVideoFrame::PixelFormat pixelFormat)
 	}
 }
 
-void Tracker::send(QVideoFrame* frame) {
-	auto& output(buffers.writeBuffer());
+void Tracker::send(QVideoFrame* inputFrame) {
+	auto& buffer(buffers.writeBuffer());
 
-	auto pixelFormat(frame->pixelFormat());
-	auto size(frame->size());
+	auto& outputMat(buffer.first);
+	auto& outputReading(buffer.second);
+
+	auto inputReading(filter->rotation.reading());
+	outputReading.val[0] = inputReading ? inputReading->x() : nan;
+	outputReading.val[1] = inputReading ? inputReading->y() : nan;
+	outputReading.val[2] = inputReading ? inputReading->z() : nan;
+	//qWarning() << outputReading.val[0] << outputReading.val[1] << outputReading.val[2];
+
+	auto pixelFormat(inputFrame->pixelFormat());
+	auto size(inputFrame->size());
 	auto height(size.height());
 	auto width(size.width());
 	//qWarning() << pixelFormat << height << width;
 
-	frame->map(QAbstractVideoBuffer::ReadOnly);
+	inputFrame->map(QAbstractVideoBuffer::ReadOnly);
 
 	auto inputType(getCvType(pixelFormat));
 	auto cvtCode(getCvtCode(pixelFormat));
 
-	auto bits(frame->bits());
-	auto bytesPerLine(frame->bytesPerLine());
+	auto bits(inputFrame->bits());
+	auto bytesPerLine(inputFrame->bytesPerLine());
 
 	//qWarning() << inputType << bits << bytesPerLine;
-	auto input(cv::Mat(height, width, inputType, bits, bytesPerLine));
+	auto inputMat(cv::Mat(height, width, inputType, bits, bytesPerLine));
 
-	auto resize(input.size() != output.size());
+	auto resize(inputMat.size() != outputMat.size());
 	auto convert(cvtCode != cv::COLOR_COLORCVT_MAX);
 	if (resize && convert) {
-		cv::resize(input, resized, output.size());
-		cv::cvtColor(resized, output, cvtCode, output.type());
+		cv::resize(inputMat, resized, outputMat.size());
+		cv::cvtColor(resized, outputMat, cvtCode, outputMat.type());
 	} else if (resize) {
-		cv::resize(input, output, output.size());
+		cv::resize(inputMat, outputMat, outputMat.size());
 	} else if (convert) {
-		cv::cvtColor(input, output, cvtCode, output.type());
+		cv::cvtColor(inputMat, outputMat, cvtCode, outputMat.type());
 	} else {
-		input.copyTo(output);
+		inputMat.copyTo(outputMat);
 	}
 
-	frame->unmap();
+	inputFrame->unmap();
 
 	if (!buffers.writeSwap()) {
 		QMetaObject::invokeMethod(this, "step", Qt::QueuedConnection);
@@ -162,8 +179,15 @@ void Tracker::send(QVideoFrame* frame) {
 void Tracker::step() {
 	buffers.readSwap();
 	auto& buffer(buffers.readBuffer());
-	//qWarning() << buffer.type() << buffer.cols << buffer.rows << buffer.step;
-	tracker.update(buffer);
+	auto& image(buffer.first);
+	auto& orientation(buffer.second);
+	if (std::isnan(orientation[0]) && std::isnan(orientation[1]) && std::isnan(orientation[2])) {
+		// nan nan nan, Batman!
+		tracker.update(image, nullptr);
+	} else {
+		auto orientationMat(cv::Mat(orientation, false));
+		tracker.update(image, &orientationMat);
+	}
 
 	auto& detection(tracker.getDetectionInfo());
 	auto robotFound(detection.robotFound);
@@ -216,6 +240,7 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* input, const QVideoSurfa
 
 VisionVideoFilter::VisionVideoFilter(QObject* parent)
 		: QAbstractVideoFilter(parent), robotFound(false) {
+	rotation.start();
 }
 
 static std::string readFile(QString path) {

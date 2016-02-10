@@ -15,5 +15,6 @@ Item {
 		anchors.fill: parent
 		source: source
 		filters: [ visionVideoFilter ]
+		fillMode: VideoOutput.PreserveAspectCrop
 	}
 }

@@ -10,7 +10,7 @@
 
 #include "thymio-tracker/src/ThymioTracker.h"
 
-const auto nan(std::numeric_limits<double>::quiet_NaN());
+const auto NaN(std::numeric_limits<double>::quiet_NaN());
 
 
 
@@ -134,9 +134,9 @@ void Tracker::send(QVideoFrame* inputFrame) {
 	auto& outputReading(buffer.second);
 
 	auto inputReading(filter->rotation.reading());
-	outputReading.val[0] = inputReading ? inputReading->x() : nan;
-	outputReading.val[1] = inputReading ? inputReading->y() : nan;
-	outputReading.val[2] = inputReading ? inputReading->z() : nan;
+	outputReading.val[0] = inputReading ? inputReading->x() : NaN;
+	outputReading.val[1] = inputReading ? inputReading->y() : NaN;
+	outputReading.val[2] = inputReading ? inputReading->z() : NaN;
 	//qWarning() << outputReading.val[0] << outputReading.val[1] << outputReading.val[2];
 
 	auto pixelFormat(inputFrame->pixelFormat());

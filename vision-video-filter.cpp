@@ -191,11 +191,14 @@ void Tracker::step() {
 
 	auto& detection(tracker.getDetectionInfo());
 	auto robotFound(detection.robotFound);
+	auto robotPose(detection.robotPose);
+
 	filter->robotFound = robotFound;
 	if (robotFound) {
-		const auto& doubles(detection.robotPose.matrix.val);
-		float* floats(filter->robotPose.data());
-		for (size_t i = 0; i < sizeof(doubles) / sizeof(double); ++i) {
+		auto mat(cv::Matx44d::diag(cv::Vec4d(1.0, 1.0, -1.0, 1.0)) * robotPose.matrix);
+		auto doubles(mat.t().val);
+		auto floats(filter->robotPose.data());
+		for (size_t i = 0; i < cv::Matx44d::channels; ++i) {
 			floats[i] = doubles[i];
 		}
 	}

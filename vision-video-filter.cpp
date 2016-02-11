@@ -178,9 +178,9 @@ void Tracker::send(QVideoFrame* inputFrame) {
 
 void Tracker::step() {
 	buffers.readSwap();
-	auto& buffer(buffers.readBuffer());
-	auto& image(buffer.first);
-	auto& orientation(buffer.second);
+	const auto& buffer(buffers.readBuffer());
+	const auto& image(buffer.first);
+	const auto& orientation(buffer.second);
 	if (std::isnan(orientation[0]) && std::isnan(orientation[1]) && std::isnan(orientation[2])) {
 		// nan nan nan, Batman!
 		tracker.update(image, nullptr);
@@ -189,18 +189,19 @@ void Tracker::step() {
 		tracker.update(image, &orientationMat);
 	}
 
-	auto& detection(tracker.getDetectionInfo());
-	auto robotFound(detection.robotFound);
-	auto robotPose(detection.robotPose);
+	const auto& detection(tracker.getDetectionInfo());
+	const auto& robotFound(detection.robotFound);
+	const auto& robotPose(detection.robotPose);
 
 	filter->robotFound = robotFound;
 	if (robotFound) {
-		auto mat(cv::Matx44d::diag(cv::Vec4d(1.0, 1.0, -1.0, 1.0)) * robotPose.matrix);
-		auto doubles(mat.t().val);
-		auto floats(filter->robotPose.data());
-		for (size_t i = 0; i < cv::Matx44d::channels; ++i) {
-			floats[i] = doubles[i];
-		}
+		const auto& val(robotPose.matrix.val);
+		filter->robotPose = QMatrix4x4(
+			val[0], val[1], val[2], val[3],
+			val[4], val[5], val[6], val[7],
+			-val[8], -val[9], -val[10], -val[11],
+			val[12], val[13], val[14], val[15]
+		);
 	}
 	emit filter->updated();
 }

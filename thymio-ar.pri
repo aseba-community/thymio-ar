@@ -65,7 +65,7 @@ TRACKER_SOURCES = \
     $$PWD/thymio-tracker/src/Grouping.cpp \
     $$PWD/thymio-tracker/src/BlobInertia.cpp
 
-QT += quick multimedia sensors
+QT += quick multimedia sensors 3dcore 3drender
 CONFIG += c++11
 QMAKE_CXXFLAGS += $$ASEBA_CXXFLAGS
 HEADERS += \

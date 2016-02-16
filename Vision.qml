@@ -12,6 +12,15 @@ Item {
 	property list<Entity> entities
 	default property alias alias: vision.entities
 
+/*/
+	readonly property bool robotFound: true
+	readonly property matrix4x4 robotPose: Qt.matrix4x4(
+		-1.00,	+0.00,	+0.02,	-0.01,
+		+0.01,	-0.75,	+0.66,	-0.01,
+		+0.02,	+0.66,	+0.75,	-0.79,
+		+0.00,	+0.00,	+0.00,	+1.00
+	)
+/*/
 	property alias robotFound: filter.robotFound
 	property alias robotPose: filter.robotPose
 
@@ -27,6 +36,7 @@ Item {
 		]
 		fillMode: QtMultimedia.VideoOutput.PreserveAspectCrop
 	}
+/**/
 
 	Scene3D {
 		anchors.fill: parent

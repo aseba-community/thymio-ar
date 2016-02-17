@@ -62,12 +62,13 @@ class Tracker : public QObject {
 	Q_OBJECT
 public:
 	explicit Tracker(VisionVideoFilter* filter, cv::FileStorage& calibration, std::istream& geomHashing);
-	void send(QVideoFrame* frame);
+	void send(QVideoFrame* frame, const QVideoSurfaceFormat& surfaceFormat);
 public slots:
 	void step();
 private:
 	VisionVideoFilter* filter;
-	cv::Mat resized;
+	cv::Mat temp1;
+	cv::Mat temp2;
 	struct Buffer {
 		cv::Vec3d orientation;
 		cv::Mat image;
@@ -132,7 +133,7 @@ static cv::ColorConversionCodes getCvtCode(QVideoFrame::PixelFormat pixelFormat)
 	}
 }
 
-void Tracker::send(QVideoFrame* inputFrame) {
+void Tracker::send(QVideoFrame* inputFrame, const QVideoSurfaceFormat& surfaceFormat) {
 	auto& buffer(buffers.writeBuffer());
 
 	auto inputReading(filter->rotation.reading());
@@ -162,13 +163,27 @@ void Tracker::send(QVideoFrame* inputFrame) {
 
 	auto resize(inputMat.size() != outputSize);
 	auto convert(cvtCode != cv::COLOR_COLORCVT_MAX);
-	if (resize && convert) {
-		cv::resize(inputMat, resized, outputSize);
-		cv::cvtColor(resized, buffer.image, cvtCode, outputType);
+	auto flip(surfaceFormat.scanLineDirection() == QVideoSurfaceFormat::BottomToTop);
+
+	if (resize && convert && flip) {
+		cv::resize(inputMat, temp1, outputSize);
+		cv::cvtColor(temp1, temp2, cvtCode, outputType);
+		cv::flip(temp2, buffer.image, 0);
+	} else if (resize && convert) {
+		cv::resize(inputMat, temp1, outputSize);
+		cv::cvtColor(temp1, buffer.image, cvtCode, outputType);
+	} else if (resize && flip) {
+		cv::resize(inputMat, temp1, outputSize);
+		cv::flip(temp1, buffer.image, 0);
+	} else if (convert && flip) {
+		cv::cvtColor(inputMat, temp1, cvtCode, outputType);
+		cv::flip(temp1, buffer.image, 0);
 	} else if (resize) {
 		cv::resize(inputMat, buffer.image, outputSize);
 	} else if (convert) {
 		cv::cvtColor(inputMat, buffer.image, cvtCode, outputType);
+	} else if (flip) {
+		cv::flip(inputMat, buffer.image, 0);
 	} else {
 		inputMat.copyTo(buffer.image);
 	}
@@ -236,7 +251,7 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* input, const QVideoSurfa
 	Q_UNUSED(surfaceFormat);
 	Q_UNUSED(flags);
 
-	tracker.send(input);
+	tracker.send(input, surfaceFormat);
 
 	return *input;
 }

@@ -163,7 +163,7 @@ void Tracker::send(QVideoFrame* inputFrame, const QVideoSurfaceFormat& surfaceFo
 
 	auto resize(inputMat.size() != outputSize);
 	auto convert(cvtCode != cv::COLOR_COLORCVT_MAX);
-	auto flip(surfaceFormat.scanLineDirection() == QVideoSurfaceFormat::BottomToTop);
+	auto flip(surfaceFormat.scanLineDirection() == QVideoSurfaceFormat::BottomToTop || QSysInfo::productType() == "android");
 
 	if (resize && convert && flip) {
 		cv::resize(inputMat, temp1, outputSize);

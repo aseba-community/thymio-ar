@@ -118,7 +118,7 @@ static int getCvType(QVideoFrame::PixelFormat pixelFormat) {
 static cv::ColorConversionCodes getCvtCode(QVideoFrame::PixelFormat pixelFormat) {
 	switch (pixelFormat) {
 	case QVideoFrame::Format_BGR32:
-		return cv::COLOR_BGRA2GRAY;
+		return cv::COLOR_BGR2GRAY;
 	case QVideoFrame::Format_YUV420P:
 		// no conversion: just take the Y
 		return cv::COLOR_COLORCVT_MAX;

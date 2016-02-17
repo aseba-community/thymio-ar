@@ -68,7 +68,11 @@ public slots:
 private:
 	VisionVideoFilter* filter;
 	cv::Mat resized;
-	TripleBuffer<std::pair<cv::Mat, cv::Vec3d>> buffers;
+	struct Buffer {
+		cv::Vec3d orientation;
+		cv::Mat image;
+	};
+	TripleBuffer<Buffer> buffers;
 	QVideoFrame* free;
 	thymio_tracker::ThymioTracker tracker;
 };
@@ -131,13 +135,12 @@ static cv::ColorConversionCodes getCvtCode(QVideoFrame::PixelFormat pixelFormat)
 void Tracker::send(QVideoFrame* inputFrame) {
 	auto& buffer(buffers.writeBuffer());
 
-	auto& outputMat(buffer.first);
-	auto& outputReading(buffer.second);
-
 	auto inputReading(filter->rotation.reading());
-	outputReading.val[0] = inputReading ? inputReading->x() : NaN;
-	outputReading.val[1] = inputReading ? inputReading->y() : NaN;
-	outputReading.val[2] = inputReading ? inputReading->z() : NaN;
+	if (inputReading != nullptr) {
+		buffer.orientation = cv::Vec3d(inputReading->x(), inputReading->y(), inputReading->z());
+	} else {
+		buffer.orientation = cv::Vec3d::all(NaN);
+	}
 	//qWarning() << outputReading.val[0] << outputReading.val[1] << outputReading.val[2];
 
 	auto pixelFormat(inputFrame->pixelFormat());
@@ -161,13 +164,13 @@ void Tracker::send(QVideoFrame* inputFrame) {
 	auto convert(cvtCode != cv::COLOR_COLORCVT_MAX);
 	if (resize && convert) {
 		cv::resize(inputMat, resized, outputSize);
-		cv::cvtColor(resized, outputMat, cvtCode, outputType);
+		cv::cvtColor(resized, buffer.image, cvtCode, outputType);
 	} else if (resize) {
-		cv::resize(inputMat, outputMat, outputSize);
+		cv::resize(inputMat, buffer.image, outputSize);
 	} else if (convert) {
-		cv::cvtColor(inputMat, outputMat, cvtCode, outputType);
+		cv::cvtColor(inputMat, buffer.image, cvtCode, outputType);
 	} else {
-		inputMat.copyTo(outputMat);
+		inputMat.copyTo(buffer.image);
 	}
 
 	inputFrame->unmap();
@@ -180,14 +183,12 @@ void Tracker::send(QVideoFrame* inputFrame) {
 void Tracker::step() {
 	buffers.readSwap();
 	const auto& buffer(buffers.readBuffer());
-	const auto& image(buffer.first);
-	const auto& orientation(buffer.second);
-	if (std::isnan(orientation[0]) && std::isnan(orientation[1]) && std::isnan(orientation[2])) {
+	if (std::isnan(buffer.orientation[0]) && std::isnan(buffer.orientation[1]) && std::isnan(buffer.orientation[2])) {
 		// nan nan nan, Batman!
-		tracker.update(image, nullptr);
+		tracker.update(buffer.image, nullptr);
 	} else {
-		auto orientationMat(cv::Mat(orientation, false));
-		tracker.update(image, &orientationMat);
+		auto orientationMat(cv::Mat(buffer.orientation, false));
+		tracker.update(buffer.image, &orientationMat);
 	}
 
 	const auto& detection(tracker.getDetectionInfo());

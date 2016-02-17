@@ -10,6 +10,11 @@
 
 #include "thymio-tracker/src/ThymioTracker.h"
 
+
+
+
+const auto outputSize(cv::Size(640, 480));
+const auto outputType(CV_8UC1);
 const auto NaN(std::numeric_limits<double>::quiet_NaN());
 
 
@@ -70,10 +75,6 @@ private:
 
 Tracker::Tracker(VisionVideoFilter* filter, cv::FileStorage& calibration, std::istream& geomHashing)
 		: filter(filter), tracker(calibration, geomHashing) {
-	buffers.writeBuffer().first.create(480, 640, CV_8UC1);
-	buffers.readBuffer().first.create(480, 640, CV_8UC1);
-	buffers.readSwap();
-	buffers.readBuffer().first.create(480, 640, CV_8UC1);
 }
 
 static int getCvType(QVideoFrame::PixelFormat pixelFormat) {
@@ -156,15 +157,15 @@ void Tracker::send(QVideoFrame* inputFrame) {
 	//qWarning() << inputType << bits << bytesPerLine;
 	auto inputMat(cv::Mat(height, width, inputType, bits, bytesPerLine));
 
-	auto resize(inputMat.size() != outputMat.size());
+	auto resize(inputMat.size() != outputSize);
 	auto convert(cvtCode != cv::COLOR_COLORCVT_MAX);
 	if (resize && convert) {
-		cv::resize(inputMat, resized, outputMat.size());
-		cv::cvtColor(resized, outputMat, cvtCode, outputMat.type());
+		cv::resize(inputMat, resized, outputSize);
+		cv::cvtColor(resized, outputMat, cvtCode, outputType);
 	} else if (resize) {
-		cv::resize(inputMat, outputMat, outputMat.size());
+		cv::resize(inputMat, outputMat, outputSize);
 	} else if (convert) {
-		cv::cvtColor(inputMat, outputMat, cvtCode, outputMat.type());
+		cv::cvtColor(inputMat, outputMat, cvtCode, outputType);
 	} else {
 		inputMat.copyTo(outputMat);
 	}

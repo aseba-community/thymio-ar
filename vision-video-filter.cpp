@@ -61,25 +61,31 @@ private:
 class Tracker : public QObject {
 	Q_OBJECT
 public:
-	explicit Tracker(VisionVideoFilter* filter, cv::FileStorage& calibration, std::istream& geomHashing);
-	void send(QVideoFrame* frame, const QVideoSurfaceFormat& surfaceFormat);
-public slots:
-	void step();
-private:
-	VisionVideoFilter* filter;
-	cv::Mat temp1;
-	cv::Mat temp2;
-	struct Buffer {
+	explicit Tracker(cv::FileStorage& calibration, std::istream& geomHashing);
+	struct Input {
 		cv::Vec3d orientation;
 		cv::Mat image;
 	};
-	TripleBuffer<Buffer> buffers;
-	QVideoFrame* free;
+	struct Output {
+		QVector3D rotation;
+		bool robotFound;
+		QMatrix4x4 robotPose;
+	};
+	Input& inputBuffer();
+	void inputSwap();
+	void outputSwap();
+	Output& outputBuffer();
+private slots:
+	void track();
+signals:
+	void tracked();
+private:
+	TripleBuffer<Input> inputs;
+	TripleBuffer<Output> outputs;
 	thymio_tracker::ThymioTracker tracker;
 };
 
-Tracker::Tracker(VisionVideoFilter* filter, cv::FileStorage& calibration, std::istream& geomHashing)
-		: filter(filter), tracker(calibration, geomHashing) {
+Tracker::Tracker(cv::FileStorage& calibration, std::istream& geomHashing): tracker(calibration, geomHashing) {
 }
 
 static int getCvType(QVideoFrame::PixelFormat pixelFormat) {
@@ -133,14 +139,108 @@ static cv::ColorConversionCodes getCvtCode(QVideoFrame::PixelFormat pixelFormat)
 	}
 }
 
-void Tracker::send(QVideoFrame* inputFrame, const QVideoSurfaceFormat& surfaceFormat) {
-	auto& buffer(buffers.writeBuffer());
+Tracker::Input& Tracker::inputBuffer() {
+	return inputs.writeBuffer();
+}
 
-	auto inputReading(filter->rotation.reading());
-	if (inputReading != nullptr) {
-		buffer.orientation = cv::Vec3d(inputReading->x(), inputReading->y(), inputReading->z());
+void Tracker::inputSwap() {
+	if (!inputs.writeSwap()) {
+		QMetaObject::invokeMethod(this, "track", Qt::QueuedConnection);
+	}
+}
+
+void Tracker::outputSwap() {
+	outputs.readSwap();
+}
+
+Tracker::Output& Tracker::outputBuffer() {
+	return outputs.readBuffer();
+}
+
+void Tracker::track() {
+	inputs.readSwap();
+	const auto& input(inputs.readBuffer());
+
+	if (std::isnan(input.orientation[0]) && std::isnan(input.orientation[1]) && std::isnan(input.orientation[2])) {
+		// nan nan nan, Batman!
+		tracker.update(input.image, nullptr);
 	} else {
-		buffer.orientation = cv::Vec3d::all(NaN);
+		auto orientationMat(cv::Mat(input.orientation, false));
+		tracker.update(input.image, &orientationMat);
+	}
+	const auto& detection(tracker.getDetectionInfo());
+
+	auto& output(outputs.writeBuffer());
+
+	const auto& orientation(input.orientation.val);
+	output.rotation = QVector3D(orientation[0], orientation[1], orientation[2]);
+
+	output.robotFound = detection.robotFound;
+
+	const auto& robotPose(detection.robotPose.matrix.val);
+	output.robotPose = QMatrix4x4(
+		robotPose[0], robotPose[1], robotPose[2], robotPose[3],
+		-robotPose[4], -robotPose[5], -robotPose[6], -robotPose[7],
+		-robotPose[8], -robotPose[9], -robotPose[10], -robotPose[11],
+		robotPose[12], robotPose[13], robotPose[14], robotPose[15]
+	);
+	output.robotPose.optimize();
+
+	if (!outputs.writeSwap()) {
+		emit tracked();
+	}
+}
+
+
+
+
+class VisionVideoFilterRunnable : public QVideoFilterRunnable {
+public:
+	explicit VisionVideoFilterRunnable(VisionVideoFilter* filter, cv::FileStorage& calibration, std::istream& geomHashing);
+	~VisionVideoFilterRunnable();
+	QVideoFrame run(QVideoFrame* input, const QVideoSurfaceFormat& surfaceFormat, RunFlags flags);
+private:
+	VisionVideoFilter* filter;
+	QThread thread;
+	Tracker tracker;
+	cv::Mat temp1;
+	cv::Mat temp2;
+};
+
+VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* filter, cv::FileStorage& calibration, std::istream& geomHashing)
+		: filter(filter), tracker(calibration, geomHashing) {
+	tracker.moveToThread(&thread);
+
+	QObject::connect(&tracker, &Tracker::tracked, filter, [this]() {
+		tracker.outputSwap();
+		const auto& output(tracker.outputBuffer());
+
+		auto filter(this->filter);
+		filter->rotation = output.rotation;
+		filter->robotFound = output.robotFound;
+		filter->robotPose = output.robotPose;
+		emit filter->updated();
+	}, Qt::QueuedConnection);
+
+	thread.start();
+}
+
+VisionVideoFilterRunnable::~VisionVideoFilterRunnable() {
+	thread.quit();
+	thread.wait();
+}
+
+QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideoSurfaceFormat& surfaceFormat, RunFlags flags) {
+	Q_UNUSED(surfaceFormat);
+	Q_UNUSED(flags);
+
+	auto& input(tracker.inputBuffer());
+
+	auto inputReading(filter->sensor.reading());
+	if (inputReading != nullptr) {
+		input.orientation = cv::Vec3d(inputReading->x(), inputReading->y(), inputReading->z());
+	} else {
+		input.orientation = cv::Vec3d::all(NaN);
 	}
 	//qWarning() << outputReading.val[0] << outputReading.val[1] << outputReading.val[2];
 
@@ -168,92 +268,31 @@ void Tracker::send(QVideoFrame* inputFrame, const QVideoSurfaceFormat& surfaceFo
 	if (resize && convert && flip) {
 		cv::resize(inputMat, temp1, outputSize);
 		cv::cvtColor(temp1, temp2, cvtCode, outputType);
-		cv::flip(temp2, buffer.image, 0);
+		cv::flip(temp2, input.image, 0);
 	} else if (resize && convert) {
 		cv::resize(inputMat, temp1, outputSize);
-		cv::cvtColor(temp1, buffer.image, cvtCode, outputType);
+		cv::cvtColor(temp1, input.image, cvtCode, outputType);
 	} else if (resize && flip) {
 		cv::resize(inputMat, temp1, outputSize);
-		cv::flip(temp1, buffer.image, 0);
+		cv::flip(temp1, input.image, 0);
 	} else if (convert && flip) {
 		cv::cvtColor(inputMat, temp1, cvtCode, outputType);
-		cv::flip(temp1, buffer.image, 0);
+		cv::flip(temp1, input.image, 0);
 	} else if (resize) {
-		cv::resize(inputMat, buffer.image, outputSize);
+		cv::resize(inputMat, input.image, outputSize);
 	} else if (convert) {
-		cv::cvtColor(inputMat, buffer.image, cvtCode, outputType);
+		cv::cvtColor(inputMat, input.image, cvtCode, outputType);
 	} else if (flip) {
-		cv::flip(inputMat, buffer.image, 0);
+		cv::flip(inputMat, input.image, 0);
 	} else {
-		inputMat.copyTo(buffer.image);
+		inputMat.copyTo(input.image);
 	}
 
 	inputFrame->unmap();
 
-	if (!buffers.writeSwap()) {
-		QMetaObject::invokeMethod(this, "step", Qt::QueuedConnection);
-	}
-}
+	tracker.inputSwap();
 
-void Tracker::step() {
-	buffers.readSwap();
-	const auto& buffer(buffers.readBuffer());
-	if (std::isnan(buffer.orientation[0]) && std::isnan(buffer.orientation[1]) && std::isnan(buffer.orientation[2])) {
-		// nan nan nan, Batman!
-		tracker.update(buffer.image, nullptr);
-	} else {
-		auto orientationMat(cv::Mat(buffer.orientation, false));
-		tracker.update(buffer.image, &orientationMat);
-	}
-
-	const auto& detection(tracker.getDetectionInfo());
-	const auto& robotFound(detection.robotFound);
-	const auto& robotPose(detection.robotPose);
-
-	filter->robotFound = robotFound;
-	if (robotFound) {
-		const auto& val(robotPose.matrix.val);
-		filter->robotPose = QMatrix4x4(
-			val[0], val[1], val[2], val[3],
-			-val[4], -val[5], -val[6], -val[7],
-			-val[8], -val[9], -val[10], -val[11],
-			val[12], val[13], val[14], val[15]
-		);
-	}
-	emit filter->updated();
-}
-
-
-
-
-class VisionVideoFilterRunnable : public QVideoFilterRunnable {
-public:
-	explicit VisionVideoFilterRunnable(VisionVideoFilter* filter, cv::FileStorage& calibration, std::istream& geomHashing);
-	~VisionVideoFilterRunnable();
-	QVideoFrame run(QVideoFrame* input, const QVideoSurfaceFormat& surfaceFormat, RunFlags flags);
-private:
-	QThread thread;
-	Tracker tracker;
-};
-
-VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* filter, cv::FileStorage& calibration, std::istream& geomHashing)
-		: tracker(filter, calibration, geomHashing) {
-	tracker.moveToThread(&thread);
-	thread.start();
-}
-
-VisionVideoFilterRunnable::~VisionVideoFilterRunnable() {
-	thread.quit();
-	thread.wait();
-}
-
-QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* input, const QVideoSurfaceFormat& surfaceFormat, RunFlags flags) {
-	Q_UNUSED(surfaceFormat);
-	Q_UNUSED(flags);
-
-	tracker.send(input, surfaceFormat);
-
-	return *input;
+	return *inputFrame;
 }
 
 
@@ -261,7 +300,7 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* input, const QVideoSurfa
 
 VisionVideoFilter::VisionVideoFilter(QObject* parent)
 		: QAbstractVideoFilter(parent), robotFound(false) {
-	rotation.start();
+	sensor.start();
 }
 
 static std::string readFile(QString path) {

@@ -12,9 +12,10 @@ class VisionVideoFilter : public QAbstractVideoFilter {
 public:
     explicit VisionVideoFilter(QObject* parent = 0);
 	QVideoFilterRunnable* createFilterRunnable();
+	QRotationSensor sensor;
+	QVector3D rotation;
 	bool robotFound;
 	QMatrix4x4 robotPose;
-	QRotationSensor rotation;
 signals:
 	void updated();
 };

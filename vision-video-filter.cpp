@@ -207,20 +207,34 @@ private:
 	cv::Mat temp2;
 };
 
-VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* filter, cv::FileStorage& calibration, std::istream& geomHashing)
-		: filter(filter), tracker(calibration, geomHashing) {
+VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::FileStorage& calibration, std::istream& geomHashing)
+		: filter(f), tracker(calibration, geomHashing) {
 	tracker.moveToThread(&thread);
 
-	QObject::connect(&tracker, &Tracker::tracked, filter, [this]() {
-		tracker.outputSwap();
+	auto update([this]() {
 		const auto& output(tracker.outputBuffer());
 
-		auto filter(this->filter);
-		filter->rotation = output.rotation;
 		filter->robotFound = output.robotFound;
 		filter->robotPose = output.robotPose;
+
+		auto reading(filter->sensor.reading());
+		if (reading != nullptr) {
+			auto rotation(QVector3D(reading->x(), reading->y(), reading->z()));
+			auto diff(output.rotation - rotation);
+			auto quaternion(QQuaternion::fromEulerAngles(diff));
+
+			filter->robotPose.rotate(quaternion);
+		}
+
 		emit filter->updated();
+	});
+
+	QObject::connect(&tracker, &Tracker::tracked, filter, [this, update]() {
+		tracker.outputSwap();
+		update();
 	}, Qt::QueuedConnection);
+
+	QObject::connect(&filter->sensor, &QSensor::readingChanged, filter, update);
 
 	thread.start();
 }

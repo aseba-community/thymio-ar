@@ -16,8 +16,8 @@
 
 
 
-const auto outputSize(cv::Size(640, 480));
-const auto outputType(CV_8UC1);
+const auto outputWidth(640);
+const auto outputHeight(480);
 const auto NaN(std::numeric_limits<double>::quiet_NaN());
 
 
@@ -278,17 +278,20 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 	//qWarning() << inputType << bits << bytesPerLine;
 	auto inputMat(cv::Mat(height, width, inputType, bits, bytesPerLine));
 
+	const auto outputSize(cv::Size(outputWidth, outputHeight));
+	const auto outputType(CV_8UC1);
+
 	auto resize(inputMat.size() != outputSize);
 	auto convert(cvtCode != cv::COLOR_COLORCVT_MAX);
 	auto flip(surfaceFormat.scanLineDirection() == QVideoSurfaceFormat::BottomToTop || QSysInfo::productType() == "android");
 
 	if (resize && convert && flip) {
-		cv::resize(inputMat, temp1, outputSize);
-		cv::cvtColor(temp1, temp2, cvtCode, outputType);
+		cv::cvtColor(inputMat, temp1, cvtCode, outputType);
+		cv::resize(temp1, temp2, outputSize);
 		cv::flip(temp2, input.image, 0);
 	} else if (resize && convert) {
-		cv::resize(inputMat, temp1, outputSize);
-		cv::cvtColor(temp1, input.image, cvtCode, outputType);
+		cv::cvtColor(inputMat, temp1, cvtCode, outputType);
+		cv::resize(temp1, input.image, outputSize);
 	} else if (resize && flip) {
 		cv::resize(inputMat, temp1, outputSize);
 		cv::flip(temp1, input.image, 0);

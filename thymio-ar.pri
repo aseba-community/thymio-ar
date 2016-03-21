@@ -16,6 +16,16 @@ android {
     OPENCV_LIBS = -L$$OPENCV_BIN/lib -lopencv_calib3d -lopencv_flann -lopencv_features2d -lopencv_imgproc -lopencv_core
 }
 
+defined(THYMIO_AR_IMWRITE) {
+    DEFINES += THYMIO_AR_IMWRITE
+    android {
+        OPENCV_LIBS += -lopencv_imgcodecs -lIlmImf -llibjpeg -llibwebp -llibtiff -llibpng -llibjasper
+    } else {
+        OPENCV_INCLUDE += $$OPENCV_SRC/modules/videoio/include $$OPENCV_SRC/modules/imgcodecs/include
+        OPENCV_LIBS += -lopencv_videoio -lopencv_imgcodecs
+    }
+}
+
 ASEBA_SOURCES = \
     $$PWD/dashel/dashel/dashel-common.cpp \
     $$PWD/aseba/common/utils/FormatableString.cpp \

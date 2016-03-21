@@ -7,6 +7,9 @@
 
 #pragma GCC diagnostic ignored "-Wunused-local-typedefs"
 #include <opencv2/core.hpp>
+#ifdef THYMIO_AR_IMWRITE
+#include <opencv2/imgcodecs.hpp>
+#endif
 
 #include "thymio-tracker/src/ThymioTracker.h"
 
@@ -303,6 +306,23 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 	}
 
 	inputFrame->unmap();
+
+#ifdef THYMIO_AR_IMWRITE
+	static bool first = true;
+	if (first) {
+		qWarning()
+				<< input.image.data[0x00] << input.image.data[0x01] << input.image.data[0x02] << input.image.data[0x03]
+				<< input.image.data[0x04] << input.image.data[0x05] << input.image.data[0x06] << input.image.data[0x07]
+				<< input.image.data[0x08] << input.image.data[0x09] << input.image.data[0x0A] << input.image.data[0x0B]
+				<< input.image.data[0x0C] << input.image.data[0x0D] << input.image.data[0x0E] << input.image.data[0x0F]
+				<< input.image.data[0x10] << input.image.data[0x11] << input.image.data[0x12] << input.image.data[0x13]
+				<< input.image.data[0x14] << input.image.data[0x15] << input.image.data[0x16] << input.image.data[0x17]
+				<< input.image.data[0x18] << input.image.data[0x19] << input.image.data[0x1A] << input.image.data[0x1B]
+				<< input.image.data[0x1C] << input.image.data[0x1D] << input.image.data[0x1E] << input.image.data[0x1F];
+		cv::imwrite(QSysInfo::productType() == "android" ? "/storage/emulated/0/DCIM/100ANDRO/toto.png" : "toto.png", input.image);
+	}
+	first = false;
+#endif
 
 	tracker.inputSwap();
 

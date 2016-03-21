@@ -12,6 +12,7 @@ Item {
 	property list<Entity> entities
 	default property alias alias: vision.entities
 
+	property alias updatesPerSecond: filter.updatesPerSecond
 	property alias robotFound: filter.robotFound
 	property alias robotPose: filter.robotPose
 
@@ -66,6 +67,15 @@ Item {
 				}
 			}
 
+		}
+	}
+
+	Rectangle {
+		color: "white"
+		width: childrenRect.width
+		height: childrenRect.height
+		Text {
+			text: updatesPerSecond
 		}
 	}
 }

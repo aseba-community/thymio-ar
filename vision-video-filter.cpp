@@ -75,6 +75,7 @@ public:
 	};
 	struct Output {
 		QVector3D rotation;
+		float updatesPerSecond;
 		bool robotFound;
 		QMatrix4x4 robotPose;
 	};
@@ -182,6 +183,8 @@ void Tracker::track() {
 	const auto& orientation(input.orientation.val);
 	output.rotation = QVector3D(orientation[0], orientation[1], orientation[2]);
 
+	output.updatesPerSecond = tracker.getTimer().getFps();
+
 	output.robotFound = detection.robotFound;
 
 	const auto& robotPose(detection.robotPose.matrix.val);
@@ -224,6 +227,7 @@ VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::F
 	auto update([this]() {
 		const auto& output(tracker.outputBuffer());
 
+		filter->updatesPerSecond = output.updatesPerSecond;
 		filter->robotFound = output.robotFound;
 		filter->robotPose = output.robotPose;
 

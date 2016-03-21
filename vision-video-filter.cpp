@@ -19,7 +19,6 @@
 
 
 
-const auto outputWidth(640);
 const auto outputHeight(480);
 const auto NaN(std::numeric_limits<double>::quiet_NaN());
 
@@ -269,6 +268,11 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 	}
 	//qWarning() << outputReading.val[0] << outputReading.val[1] << outputReading.val[2];
 
+	auto size(inputFrame->size());
+	auto height(size.height());
+	auto width(size.width());
+	auto outputWidth(outputHeight * width / height);
+
 	if (inputFrame->handleType() == QAbstractVideoBuffer::HandleType::GLTextureHandle) {
 
 		if (gl == nullptr) {
@@ -336,14 +340,9 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 
 	} else {
 
-		auto pixelFormat(inputFrame->pixelFormat());
-		auto size(inputFrame->size());
-		auto height(size.height());
-		auto width(size.width());
-		//qWarning() << pixelFormat << height << width;
-
 		inputFrame->map(QAbstractVideoBuffer::ReadOnly);
 
+		auto pixelFormat(inputFrame->pixelFormat());
 		auto inputType(getCvType(pixelFormat));
 		auto cvtCode(getCvtCode(pixelFormat));
 

@@ -4,6 +4,9 @@
 #include <QDebug>
 #include <QFile>
 #include <QThread>
+#include <QOpenGLExtraFunctions>
+#include <QOpenGLShaderProgram>
+#include <QOpenGLTexture>
 
 #pragma GCC diagnostic ignored "-Wunused-local-typedefs"
 #include <opencv2/core.hpp>
@@ -68,6 +71,8 @@ public:
 	struct Input {
 		cv::Vec3d orientation;
 		cv::Mat image;
+		GLuint framebuffer = 0;
+		GLuint renderbuffer = 0;
 	};
 	struct Output {
 		QVector3D rotation;
@@ -208,10 +213,13 @@ private:
 	Tracker tracker;
 	cv::Mat temp1;
 	cv::Mat temp2;
+	QOpenGLExtraFunctions* gl;
+	QOpenGLShaderProgram program;
+	GLint imageLocation;
 };
 
 VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::FileStorage& calibration, std::istream& geomHashing)
-		: filter(f), tracker(calibration, geomHashing) {
+		: filter(f), tracker(calibration, geomHashing), gl(nullptr) {
 	tracker.moveToThread(&thread);
 
 	auto update([this]() {
@@ -261,54 +269,123 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 	}
 	//qWarning() << outputReading.val[0] << outputReading.val[1] << outputReading.val[2];
 
-	auto pixelFormat(inputFrame->pixelFormat());
-	auto size(inputFrame->size());
-	auto height(size.height());
-	auto width(size.width());
-	//qWarning() << pixelFormat << height << width;
+	if (inputFrame->handleType() == QAbstractVideoBuffer::HandleType::GLTextureHandle) {
 
-	inputFrame->map(QAbstractVideoBuffer::ReadOnly);
+		if (gl == nullptr) {
+			auto context(QOpenGLContext::currentContext());
+			gl = context->extraFunctions();
 
-	auto inputType(getCvType(pixelFormat));
-	auto cvtCode(getCvtCode(pixelFormat));
+			auto version(context->isOpenGLES() ? "#version 300 es\n" : "#version 130\n");
 
-	auto bits(inputFrame->bits());
-	auto bytesPerLine(inputFrame->bytesPerLine());
+			QString vertex(version);
+			vertex += R"(
+				out vec2 coord;
+				void main(void) {
+					int id = gl_VertexID;
+					coord = vec2((id << 1) & 2, id & 2);
+					gl_Position = vec4(coord * 2.0 - 1.0, 0.0, 1.0);
+				}
+			)";
 
-	//qWarning() << inputType << bits << bytesPerLine;
-	auto inputMat(cv::Mat(height, width, inputType, bits, bytesPerLine));
+			QString fragment(version);
+			fragment += R"(
+				in lowp vec2 coord;
+				uniform sampler2D image;
+				const lowp vec3 luma = vec3(0.2126, 0.7152, 0.0722);
+				out lowp float fragment;
+				void main(void) {
+					vec3 color = texture(image, coord).rgb;
+					fragment = dot(color, luma);
+				}
+			)";
 
-	const auto outputSize(cv::Size(outputWidth, outputHeight));
-	const auto outputType(CV_8UC1);
+			program.addShaderFromSourceCode(QOpenGLShader::Vertex, vertex);
+			program.addShaderFromSourceCode(QOpenGLShader::Fragment, fragment);
+			program.link();
+			imageLocation = program.uniformLocation("image");
+		}
 
-	auto resize(inputMat.size() != outputSize);
-	auto convert(cvtCode != cv::COLOR_COLORCVT_MAX);
-	auto flip(surfaceFormat.scanLineDirection() == QVideoSurfaceFormat::BottomToTop || QSysInfo::productType() == "android");
+		if (input.renderbuffer == 0) {
+			gl->glGenRenderbuffers(1, &input.renderbuffer);
+			gl->glBindRenderbuffer(GL_RENDERBUFFER, input.renderbuffer);
+			gl->glRenderbufferStorage(GL_RENDERBUFFER, QOpenGLTexture::R8_UNorm, outputWidth, outputHeight);
+			gl->glBindRenderbuffer(GL_RENDERBUFFER, 0);
+		}
 
-	if (resize && convert && flip) {
-		cv::cvtColor(inputMat, temp1, cvtCode, outputType);
-		cv::resize(temp1, temp2, outputSize);
-		cv::flip(temp2, input.image, 0);
-	} else if (resize && convert) {
-		cv::cvtColor(inputMat, temp1, cvtCode, outputType);
-		cv::resize(temp1, input.image, outputSize);
-	} else if (resize && flip) {
-		cv::resize(inputMat, temp1, outputSize);
-		cv::flip(temp1, input.image, 0);
-	} else if (convert && flip) {
-		cv::cvtColor(inputMat, temp1, cvtCode, outputType);
-		cv::flip(temp1, input.image, 0);
-	} else if (resize) {
-		cv::resize(inputMat, input.image, outputSize);
-	} else if (convert) {
-		cv::cvtColor(inputMat, input.image, cvtCode, outputType);
-	} else if (flip) {
-		cv::flip(inputMat, input.image, 0);
+		if (input.framebuffer == 0) {
+			gl->glGenFramebuffers(1, &input.framebuffer);
+			gl->glBindFramebuffer(GL_FRAMEBUFFER, input.framebuffer);
+			gl->glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, input.renderbuffer);
+			gl->glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		}
+
+		gl->glActiveTexture(GL_TEXTURE0);
+		gl->glBindTexture(QOpenGLTexture::Target2D, inputFrame->handle().toUInt());
+
+		program.bind();
+		program.setUniformValue(imageLocation, 0);
+		program.enableAttributeArray(0);
+		gl->glBindFramebuffer(GL_FRAMEBUFFER, input.framebuffer);
+		gl->glViewport(0, 0, outputWidth, outputHeight);
+		gl->glDisable(GL_BLEND);
+		gl->glDrawArrays(GL_TRIANGLES, 0, 3);
+
+		input.image.create(outputHeight, outputWidth, CV_8UC1);
+		gl->glPixelStorei(GL_PACK_ALIGNMENT, 1);
+		gl->glReadPixels(0, 0, outputWidth, outputHeight, QOpenGLTexture::Red, QOpenGLTexture::UInt8, input.image.data);
+
 	} else {
-		inputMat.copyTo(input.image);
-	}
 
-	inputFrame->unmap();
+		auto pixelFormat(inputFrame->pixelFormat());
+		auto size(inputFrame->size());
+		auto height(size.height());
+		auto width(size.width());
+		//qWarning() << pixelFormat << height << width;
+
+		inputFrame->map(QAbstractVideoBuffer::ReadOnly);
+
+		auto inputType(getCvType(pixelFormat));
+		auto cvtCode(getCvtCode(pixelFormat));
+
+		auto bits(inputFrame->bits());
+		auto bytesPerLine(inputFrame->bytesPerLine());
+
+		//qWarning() << inputType << bits << bytesPerLine;
+		auto inputMat(cv::Mat(height, width, inputType, bits, bytesPerLine));
+
+		const auto outputSize(cv::Size(outputWidth, outputHeight));
+		const auto outputType(CV_8UC1);
+
+		auto resize(inputMat.size() != outputSize);
+		auto convert(cvtCode != cv::COLOR_COLORCVT_MAX);
+		auto flip(surfaceFormat.scanLineDirection() == QVideoSurfaceFormat::BottomToTop || QSysInfo::productType() == "android");
+
+		if (resize && convert && flip) {
+			cv::cvtColor(inputMat, temp1, cvtCode, outputType);
+			cv::resize(temp1, temp2, outputSize);
+			cv::flip(temp2, input.image, 0);
+		} else if (resize && convert) {
+			cv::cvtColor(inputMat, temp1, cvtCode, outputType);
+			cv::resize(temp1, input.image, outputSize);
+		} else if (resize && flip) {
+			cv::resize(inputMat, temp1, outputSize);
+			cv::flip(temp1, input.image, 0);
+		} else if (convert && flip) {
+			cv::cvtColor(inputMat, temp1, cvtCode, outputType);
+			cv::flip(temp1, input.image, 0);
+		} else if (resize) {
+			cv::resize(inputMat, input.image, outputSize);
+		} else if (convert) {
+			cv::cvtColor(inputMat, input.image, cvtCode, outputType);
+		} else if (flip) {
+			cv::flip(inputMat, input.image, 0);
+		} else {
+			inputMat.copyTo(input.image);
+		}
+
+		inputFrame->unmap();
+
+	}
 
 #ifdef THYMIO_AR_IMWRITE
 	static bool first = true;

@@ -12,9 +12,13 @@ Item {
 	property list<Entity> entities
 	default property alias alias: vision.entities
 
+	property alias landmarkFileNames: filter.landmarkFileNames
 	property alias updatesPerSecond: filter.updatesPerSecond
 	property alias robotFound: filter.robotFound
 	property alias robotPose: filter.robotPose
+	function landmarkPose(index) {
+		return filter.landmarkPose(index);
+	}
 
 	QtMultimedia.VideoOutput {
 		anchors.fill: parent

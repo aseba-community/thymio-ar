@@ -66,7 +66,7 @@ private:
 class Tracker : public QObject {
 	Q_OBJECT
 public:
-	explicit Tracker(cv::FileStorage& calibration, std::istream& geomHashing);
+	explicit Tracker(cv::FileStorage& calibration, std::istream& geomHashing, std::vector<cv::FileStorage>& landmarks);
 	struct Input {
 		cv::Vec3d orientation;
 		cv::Mat image;
@@ -78,6 +78,7 @@ public:
 		float updatesPerSecond;
 		bool robotFound;
 		QMatrix4x4 robotPose;
+		QList<QMatrix4x4> landmarkPoses;
 	};
 	Input& inputBuffer();
 	void inputSwap();
@@ -93,7 +94,8 @@ private:
 	thymio_tracker::ThymioTracker tracker;
 };
 
-Tracker::Tracker(cv::FileStorage& calibration, std::istream& geomHashing): tracker(calibration, geomHashing) {
+Tracker::Tracker(cv::FileStorage& calibration, std::istream& geomHashing, std::vector<cv::FileStorage>& landmarks)
+	: tracker(calibration, geomHashing, landmarks) {
 }
 
 static int getCvType(QVideoFrame::PixelFormat pixelFormat) {
@@ -165,6 +167,17 @@ Tracker::Output& Tracker::outputBuffer() {
 	return outputs.readBuffer();
 }
 
+QMatrix4x4 cvAffine3dToQMatrix4x4(const cv::Affine3d& affine) {
+	QMatrix4x4 matrix(
+		affine.matrix.val[0], affine.matrix.val[1], affine.matrix.val[2], affine.matrix.val[3],
+		-affine.matrix.val[4], -affine.matrix.val[5], -affine.matrix.val[6], -affine.matrix.val[7],
+		-affine.matrix.val[8], -affine.matrix.val[9], -affine.matrix.val[10], -affine.matrix.val[11],
+		affine.matrix.val[12], affine.matrix.val[13], affine.matrix.val[14], affine.matrix.val[15]
+	);
+	matrix.optimize();
+	return matrix;
+}
+
 void Tracker::track() {
 	inputs.readSwap();
 	const auto& input(inputs.readBuffer());
@@ -182,19 +195,14 @@ void Tracker::track() {
 
 	const auto& orientation(input.orientation.val);
 	output.rotation = QVector3D(orientation[0], orientation[1], orientation[2]);
-
 	output.updatesPerSecond = tracker.getTimer().getFps();
-
 	output.robotFound = detection.robotFound;
-
-	const auto& robotPose(detection.robotPose.matrix.val);
-	output.robotPose = QMatrix4x4(
-		robotPose[0], robotPose[1], robotPose[2], robotPose[3],
-		-robotPose[4], -robotPose[5], -robotPose[6], -robotPose[7],
-		-robotPose[8], -robotPose[9], -robotPose[10], -robotPose[11],
-		robotPose[12], robotPose[13], robotPose[14], robotPose[15]
-	);
-	output.robotPose.optimize();
+	output.robotPose = cvAffine3dToQMatrix4x4(detection.robotPose);
+	output.landmarkPoses.clear();
+	output.landmarkPoses.reserve(detection.landmarkDetections.size());
+	for (const auto& landmark : detection.landmarkDetections) {
+		output.landmarkPoses.push_back(cvAffine3dToQMatrix4x4(landmark.getPose()));
+	}
 
 	if (!outputs.writeSwap()) {
 		emit tracked();
@@ -206,7 +214,7 @@ void Tracker::track() {
 
 class VisionVideoFilterRunnable : public QVideoFilterRunnable {
 public:
-	explicit VisionVideoFilterRunnable(VisionVideoFilter* filter, cv::FileStorage& calibration, std::istream& geomHashing);
+	explicit VisionVideoFilterRunnable(VisionVideoFilter* filter, cv::FileStorage& calibration, std::istream& geomHashing, std::vector<cv::FileStorage>& landmarks);
 	~VisionVideoFilterRunnable();
 	QVideoFrame run(QVideoFrame* input, const QVideoSurfaceFormat& surfaceFormat, RunFlags flags);
 private:
@@ -220,8 +228,8 @@ private:
 	GLint imageLocation;
 };
 
-VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::FileStorage& calibration, std::istream& geomHashing)
-		: filter(f), tracker(calibration, geomHashing), gl(nullptr) {
+VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::FileStorage& calibration, std::istream& geomHashing, std::vector<cv::FileStorage>& landmarks)
+		: filter(f), tracker(calibration, geomHashing, landmarks), gl(nullptr) {
 	tracker.moveToThread(&thread);
 
 	auto update([this]() {
@@ -230,6 +238,7 @@ VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::F
 		filter->updatesPerSecond = output.updatesPerSecond;
 		filter->robotFound = output.robotFound;
 		filter->robotPose = output.robotPose;
+		filter->landmarkPoses = output.landmarkPoses;
 
 		auto reading(filter->sensor.reading());
 		if (reading != nullptr) {
@@ -238,6 +247,9 @@ VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::F
 			auto quaternion(QQuaternion::fromEulerAngles(diff));
 
 			filter->robotPose.rotate(quaternion);
+			for (auto& landmarkPose : filter->landmarkPoses) {
+				landmarkPose.rotate(quaternion);
+			}
 		}
 
 		emit filter->updated();
@@ -431,7 +443,18 @@ static std::string readFile(QString path) {
 QVideoFilterRunnable* VisionVideoFilter::createFilterRunnable() {
 	cv::FileStorage calibration(readFile(":/thymio-ar/calibration.xml"), cv::FileStorage::READ | cv::FileStorage::MEMORY);
 	std::istringstream geomHashing(readFile(":/thymio-ar/geomHashing.dat"));
-	return new VisionVideoFilterRunnable(this, calibration, geomHashing);
+	std::vector<cv::FileStorage> landmarks;
+	for (auto landmarkFileName : this->landmarkFileNames) {
+		landmarks.push_back(cv::FileStorage(readFile(landmarkFileName), cv::FileStorage::READ | cv::FileStorage::MEMORY));
+	}
+	return new VisionVideoFilterRunnable(this, calibration, geomHashing, landmarks);
+}
+
+QMatrix4x4 VisionVideoFilter::landmarkPose(int index) {
+	if (index < 0 || index >= landmarkPoses.size()) {
+		return QMatrix4x4();
+	}
+	return landmarkPoses.at(index);
 }
 
 // This file declares Q_OBJECT classes, so we need to

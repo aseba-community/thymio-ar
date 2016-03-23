@@ -28,6 +28,7 @@ Item {
 		filters: [
 			VisionVideoFilter {
 				id: filter
+				onUpdated: cameraPose.matrix = landmarkPose(0)
 			}
 		]
 		fillMode: QtMultimedia.VideoOutput.PreserveAspectCrop
@@ -52,7 +53,7 @@ Item {
 									aspectRatio: vision.width / vision.height
 								},
 								Transform {
-									matrix: robotPose
+									id: cameraPose
 								}
 							]
 						}

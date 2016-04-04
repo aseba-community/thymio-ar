@@ -314,7 +314,7 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 				const lowp vec3 luma = vec3(0.2126, 0.7152, 0.0722);
 				out lowp float fragment;
 				void main(void) {
-					vec3 color = texture(image, coord).rgb;
+					lowp vec3 color = texture(image, coord).rgb;
 					fragment = dot(color, luma);
 				}
 			)";

@@ -246,9 +246,14 @@ VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::F
 			auto diff(output.rotation - rotation);
 			auto quaternion(QQuaternion::fromEulerAngles(diff));
 
-			filter->robotPose.rotate(quaternion);
+			auto rotate([quaternion](QMatrix4x4& affine) {
+				affine.rotate(quaternion);
+				affine.setColumn(3, QVector4D(quaternion.rotatedVector(affine.column(3).toVector3D()), 1));
+			});
+
+			rotate(filter->robotPose);
 			for (auto& landmarkPose : filter->landmarkPoses) {
-				landmarkPose.rotate(quaternion);
+				rotate(landmarkPose);
 			}
 		}
 

@@ -426,7 +426,18 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 
 	tracker.inputSwap();
 
+/**/
 	return *inputFrame;
+/*/
+	QVideoFrame frame(input.image.size().area()*3/2, QSize(input.image.cols, input.image.rows), input.image.step, QVideoFrame::Format_YUV420P);
+	frame.setStartTime(inputFrame->startTime());
+	frame.setEndTime(inputFrame->endTime());
+	frame.map(QAbstractVideoBuffer::ReadWrite);
+	std::memcpy(frame.bits(), input.image.data, input.image.size().area());
+	std::memset(frame.bits() + input.image.size().area(), 127, input.image.size().area() / 2);
+	frame.unmap();
+	return frame;
+/**/
 }
 
 

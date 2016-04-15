@@ -72,13 +72,4 @@ Item {
 
 		}
 	}
-
-	Rectangle {
-		color: "white"
-		width: childrenRect.width
-		height: childrenRect.height
-		Text {
-			text: updatesPerSecond
-		}
-	}
 }

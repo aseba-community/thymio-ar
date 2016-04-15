@@ -76,7 +76,6 @@ public:
 	struct Output {
 		QVector3D rotation;
 		float updatesPerSecond;
-		bool robotFound;
 		QMatrix4x4 robotPose;
 		QList<QMatrix4x4> landmarkPoses;
 	};
@@ -167,7 +166,10 @@ Tracker::Output& Tracker::outputBuffer() {
 	return outputs.readBuffer();
 }
 
-QMatrix4x4 cvAffine3dToQMatrix4x4(const cv::Affine3d& affine) {
+QMatrix4x4 cvAffine3dToQMatrix4x4(bool valid, const cv::Affine3d& affine) {
+	if (!valid) {
+		return QMatrix4x4();
+	}
 	QMatrix4x4 matrix(
 		affine.matrix.val[0], affine.matrix.val[1], affine.matrix.val[2], affine.matrix.val[3],
 		-affine.matrix.val[4], -affine.matrix.val[5], -affine.matrix.val[6], -affine.matrix.val[7],
@@ -196,12 +198,11 @@ void Tracker::track() {
 	const auto& orientation(input.orientation.val);
 	output.rotation = QVector3D(orientation[0], orientation[1], orientation[2]);
 	output.updatesPerSecond = tracker.getTimer().getFps();
-	output.robotFound = detection.robotFound;
-	output.robotPose = cvAffine3dToQMatrix4x4(detection.robotPose);
+	output.robotPose = cvAffine3dToQMatrix4x4(detection.robotFound, detection.robotPose);
 	output.landmarkPoses.clear();
 	output.landmarkPoses.reserve(detection.landmarkDetections.size());
 	for (const auto& landmark : detection.landmarkDetections) {
-		output.landmarkPoses.push_back(cvAffine3dToQMatrix4x4(landmark.getPose()));
+		output.landmarkPoses.push_back(cvAffine3dToQMatrix4x4(!landmark.getHomography().empty(), landmark.getPose()));
 	}
 
 	if (!outputs.writeSwap()) {
@@ -236,9 +237,8 @@ VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::F
 		const auto& output(tracker.outputBuffer());
 
 		filter->updatesPerSecond = output.updatesPerSecond;
-		filter->robotFound = output.robotFound;
 		filter->robotPose = output.robotPose;
-		filter->landmarkPoses = output.landmarkPoses;
+		filter->landmarkPoses.clear();
 
 		auto reading(filter->sensor.reading());
 		if (reading != nullptr) {
@@ -252,8 +252,13 @@ VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::F
 			});
 
 			rotate(filter->robotPose);
-			for (auto& landmarkPose : filter->landmarkPoses) {
+			for (auto landmarkPose : output.landmarkPoses) {
 				rotate(landmarkPose);
+				filter->landmarkPoses.append(QVariant::fromValue(landmarkPose));
+			}
+		} else {
+			for (auto& landmarkPose : output.landmarkPoses) {
+				filter->landmarkPoses.append(QVariant::fromValue(landmarkPose));
 			}
 		}
 
@@ -444,7 +449,7 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 
 
 VisionVideoFilter::VisionVideoFilter(QObject* parent)
-		: QAbstractVideoFilter(parent), robotFound(false) {
+		: QAbstractVideoFilter(parent) {
 	sensor.start();
 }
 
@@ -466,11 +471,14 @@ QVideoFilterRunnable* VisionVideoFilter::createFilterRunnable() {
 	return new VisionVideoFilterRunnable(this, calibration, geomHashing, landmarks);
 }
 
-QMatrix4x4 VisionVideoFilter::landmarkPose(int index) {
-	if (index < 0 || index >= landmarkPoses.size()) {
-		return QMatrix4x4();
+const QVariantList& VisionVideoFilter::getLandmarkPoses() {
+	while (landmarkPoses.size() < landmarkFileNames.size()) {
+		landmarkPoses.append(QMatrix4x4());
 	}
-	return landmarkPoses.at(index);
+	if (landmarkPoses.size() > landmarkFileNames.size()) {
+		landmarkPoses.erase(landmarkPoses.begin() + landmarkFileNames.size(), landmarkPoses.end());
+	}
+	return landmarkPoses;
 }
 
 // This file declares Q_OBJECT classes, so we need to

@@ -14,11 +14,10 @@ Item {
 
 	property alias landmarkFileNames: filter.landmarkFileNames
 	property alias updatesPerSecond: filter.updatesPerSecond
-	property alias robotFound: filter.robotFound
 	property alias robotPose: filter.robotPose
-	function landmarkPose(index) {
-		return filter.landmarkPose(index);
-	}
+	property alias landmarkPoses: filter.landmarkPoses
+
+	readonly property matrix4x4 invalidPose: Qt.matrix4x4()
 
 	QtMultimedia.VideoOutput {
 		anchors.fill: parent
@@ -28,7 +27,6 @@ Item {
 		filters: [
 			VisionVideoFilter {
 				id: filter
-				onUpdated: cameraPose.matrix = landmarkPose(0)
 			}
 		]
 		fillMode: QtMultimedia.VideoOutput.PreserveAspectCrop
@@ -53,7 +51,7 @@ Item {
 									aspectRatio: vision.width / vision.height
 								},
 								Transform {
-									id: cameraPose
+									matrix: landmarkPoses[0]
 								}
 							]
 						}

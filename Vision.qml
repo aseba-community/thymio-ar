@@ -8,10 +8,7 @@ import QtMultimedia 5.5 as QtMultimedia
 Item {
 	id: vision
 
-	// https://bugreports.qt.io/browse/QTBUG-26810
-	property list<Entity> entities
-	default property alias alias: vision.entities
-
+	default property alias data: frameGraph.data
 	property alias landmarkFileNames: filter.landmarkFileNames
 	property alias updatesPerSecond: filter.updatesPerSecond
 	property alias robotPose: filter.robotPose
@@ -36,6 +33,7 @@ Item {
 		anchors.fill: parent
 
 		Entity {
+			id: frameGraph
 			components: FrameGraph {
 				Viewport {
 					rect: Qt.rect(0, 0, 1, 1)
@@ -62,14 +60,6 @@ Item {
 					}
 				}
 			}
-
-			Component.onCompleted: {
-				for (var i = 0; i < entities.length; ++i) {
-					var entity = entities[i];
-					entity.parent = this;
-				}
-			}
-
 		}
 	}
 }

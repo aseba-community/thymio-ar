@@ -77,7 +77,7 @@ TRACKER_SOURCES = \
     $$PWD/thymio-tracker/src/Grouping.cpp \
     $$PWD/thymio-tracker/src/Landmark.cpp \
     $$PWD/thymio-tracker/src/Models.cpp \
-    $$PWD/thymio-tracker/src/P3P.cpp \
+    $$PWD/thymio-tracker/src/Robot.cpp \
     $$PWD/thymio-tracker/src/ThymioTracker.cpp
 
 QT += quick multimedia sensors 3dcore 3drender

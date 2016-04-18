@@ -70,8 +70,6 @@ public:
 	struct Input {
 		cv::Vec3d orientation;
 		cv::Mat image;
-		GLuint framebuffer = 0;
-		GLuint renderbuffer = 0;
 	};
 	struct Output {
 		QVector3D rotation;
@@ -227,6 +225,8 @@ private:
 	QOpenGLExtraFunctions* gl;
 	QOpenGLShaderProgram program;
 	GLint imageLocation;
+	GLuint framebuffer;
+	GLuint renderbuffer;
 };
 
 VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::FileStorage& calibration, cv::FileStorage& geomHashing, cv::FileStorage& robotModel, std::vector<cv::FileStorage>& landmarks)
@@ -333,19 +333,15 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 			program.addShaderFromSourceCode(QOpenGLShader::Fragment, fragment);
 			program.link();
 			imageLocation = program.uniformLocation("image");
-		}
 
-		if (input.renderbuffer == 0) {
-			gl->glGenRenderbuffers(1, &input.renderbuffer);
-			gl->glBindRenderbuffer(GL_RENDERBUFFER, input.renderbuffer);
+			gl->glGenRenderbuffers(1, &renderbuffer);
+			gl->glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
 			gl->glRenderbufferStorage(GL_RENDERBUFFER, QOpenGLTexture::R8_UNorm, outputWidth, outputHeight);
 			gl->glBindRenderbuffer(GL_RENDERBUFFER, 0);
-		}
 
-		if (input.framebuffer == 0) {
-			gl->glGenFramebuffers(1, &input.framebuffer);
-			gl->glBindFramebuffer(GL_FRAMEBUFFER, input.framebuffer);
-			gl->glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, input.renderbuffer);
+			gl->glGenFramebuffers(1, &framebuffer);
+			gl->glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+			gl->glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderbuffer);
 			gl->glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		}
 
@@ -355,7 +351,7 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 		program.bind();
 		program.setUniformValue(imageLocation, 0);
 		program.enableAttributeArray(0);
-		gl->glBindFramebuffer(GL_FRAMEBUFFER, input.framebuffer);
+		gl->glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 		gl->glViewport(0, 0, outputWidth, outputHeight);
 		gl->glDisable(GL_BLEND);
 		gl->glDrawArrays(GL_TRIANGLES, 0, 3);

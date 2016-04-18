@@ -68,7 +68,7 @@ class Tracker : public QObject {
 public:
 	explicit Tracker(cv::FileStorage& calibration, cv::FileStorage& geomHashing, cv::FileStorage& robotModel, std::vector<cv::FileStorage>& landmarks);
 	struct Input {
-		cv::Vec3d orientation;
+		QVector3D rotation;
 		cv::Mat image;
 	};
 	struct Output {
@@ -181,19 +181,18 @@ void Tracker::track() {
 	inputs.readSwap();
 	const auto& input(inputs.readBuffer());
 
-	if (std::isnan(input.orientation[0]) && std::isnan(input.orientation[1]) && std::isnan(input.orientation[2])) {
+	if (std::isnan(input.rotation[0]) && std::isnan(input.rotation[1]) && std::isnan(input.rotation[2])) {
 		// nan nan nan, Batman!
 		tracker.update(input.image, nullptr);
 	} else {
-		auto orientationMat(cv::Mat(input.orientation, false));
-		tracker.update(input.image, &orientationMat);
+		// TODO: compute rotation matrix
+		tracker.update(input.image, nullptr);
 	}
 	const auto& detection(tracker.getDetectionInfo());
 
 	auto& output(outputs.writeBuffer());
 
-	const auto& orientation(input.orientation.val);
-	output.rotation = QVector3D(orientation[0], orientation[1], orientation[2]);
+	output.rotation = input.rotation;
 	output.robotPose = cvAffine3dToQMatrix4x4(detection.mRobotDetection.isFound(), detection.mRobotDetection.getPose());
 	output.landmarkPoses.clear();
 	output.landmarkPoses.reserve(detection.landmarkDetections.size());
@@ -285,9 +284,9 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 
 	auto inputReading(filter->sensor.reading());
 	if (inputReading != nullptr) {
-		input.orientation = cv::Vec3d(inputReading->x(), inputReading->y(), inputReading->z());
+		input.rotation = QVector3D(inputReading->x(), inputReading->y(), inputReading->z());
 	} else {
-		input.orientation = cv::Vec3d::all(NaN);
+		input.rotation = QVector3D(NaN, NaN, NaN);
 	}
 	//qWarning() << outputReading.val[0] << outputReading.val[1] << outputReading.val[2];
 

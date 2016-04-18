@@ -10,7 +10,6 @@ Item {
 
 	default property alias data: frameGraph.data
 	property alias landmarkFileNames: filter.landmarkFileNames
-	property alias updatesPerSecond: filter.updatesPerSecond
 	property alias robotPose: filter.robotPose
 	property alias landmarkPoses: filter.landmarkPoses
 

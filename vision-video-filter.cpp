@@ -73,7 +73,6 @@ public:
 	};
 	struct Output {
 		QVector3D rotation;
-		float updatesPerSecond;
 		QMatrix4x4 robotPose;
 		QList<QMatrix4x4> landmarkPoses;
 	};
@@ -195,7 +194,6 @@ void Tracker::track() {
 
 	const auto& orientation(input.orientation.val);
 	output.rotation = QVector3D(orientation[0], orientation[1], orientation[2]);
-	output.updatesPerSecond = tracker.getTimer().getFps();
 	output.robotPose = cvAffine3dToQMatrix4x4(detection.mRobotDetection.isFound(), detection.mRobotDetection.getPose());
 	output.landmarkPoses.clear();
 	output.landmarkPoses.reserve(detection.landmarkDetections.size());
@@ -236,7 +234,6 @@ VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::F
 	auto update([this]() {
 		const auto& output(tracker.outputBuffer());
 
-		filter->updatesPerSecond = output.updatesPerSecond;
 		filter->robotPose = output.robotPose;
 		filter->landmarkPoses.clear();
 

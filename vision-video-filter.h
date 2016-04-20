@@ -9,8 +9,8 @@
 class VisionVideoFilter : public QAbstractVideoFilter {
 	Q_OBJECT
 	Q_PROPERTY(QStringList landmarkFileNames MEMBER landmarkFileNames)
-	Q_PROPERTY(const QMatrix4x4 robotPose MEMBER robotPose NOTIFY updated)
-	Q_PROPERTY(const QVariantList& landmarkPoses READ getLandmarkPoses NOTIFY updated)
+	Q_PROPERTY(const QMatrix4x4 robotPose MEMBER robotPose NOTIFY updatedRobot)
+	Q_PROPERTY(const QVariantList& landmarkPoses READ getLandmarkPoses NOTIFY updatedLandmarks)
 public:
     explicit VisionVideoFilter(QObject* parent = 0);
 	QVideoFilterRunnable* createFilterRunnable();
@@ -21,7 +21,8 @@ public:
 	QVariantList landmarkPoses;
 	const QVariantList& getLandmarkPoses();
 signals:
-	void updated();
+	void updatedRobot();
+	void updatedLandmarks();
 };
 
 #endif // VISION_H

@@ -1,6 +1,7 @@
 #include "vision-video-filter.h"
 
 #include <atomic>
+#include <functional>
 #include <QDebug>
 #include <QFile>
 #include <QThread>
@@ -63,36 +64,32 @@ private:
 
 
 
-class Tracker : public QObject {
+class Runnable : public QObject {
 	Q_OBJECT
 public:
-	explicit Tracker(cv::FileStorage& calibration, cv::FileStorage& geomHashing, cv::FileStorage& robotModel, std::vector<cv::FileStorage>& landmarks);
-	struct Input {
-		QVector3D rotation;
-		cv::Mat image;
-	};
-	struct Output {
-		QVector3D rotation;
-		QMatrix4x4 robotPose;
-		QList<QMatrix4x4> landmarkPoses;
-	};
-	Input& inputBuffer();
-	void inputSwap();
-	void outputSwap();
-	Output& outputBuffer();
-private slots:
-	void track();
+	explicit Runnable(QThread& thread, const std::function<bool()>& function);
 signals:
-	void tracked();
+	void invoke();
+	void ran();
+private slots:
+	void run();
 private:
-	TripleBuffer<Input> inputs;
-	TripleBuffer<Output> outputs;
-	thymio_tracker::ThymioTracker tracker;
+	std::function<bool()> function;
 };
 
-Tracker::Tracker(cv::FileStorage& calibration, cv::FileStorage& geomHashing, cv::FileStorage& robotModel, std::vector<cv::FileStorage>& landmarks)
-	: tracker(calibration, geomHashing, robotModel, landmarks) {
+Runnable::Runnable(QThread& thread, const std::function<bool()>& function): function(function) {
+	moveToThread(&thread);
+	connect(this, &Runnable::invoke, this, &Runnable::run);
 }
+
+void Runnable::run() {
+	if (function()) {
+		emit ran();
+	}
+}
+
+
+
 
 static int getCvType(QVideoFrame::PixelFormat pixelFormat) {
 	switch(pixelFormat) {
@@ -145,24 +142,6 @@ static cv::ColorConversionCodes getCvtCode(QVideoFrame::PixelFormat pixelFormat)
 	}
 }
 
-Tracker::Input& Tracker::inputBuffer() {
-	return inputs.writeBuffer();
-}
-
-void Tracker::inputSwap() {
-	if (!inputs.writeSwap()) {
-		QMetaObject::invokeMethod(this, "track", Qt::QueuedConnection);
-	}
-}
-
-void Tracker::outputSwap() {
-	outputs.readSwap();
-}
-
-Tracker::Output& Tracker::outputBuffer() {
-	return outputs.readBuffer();
-}
-
 QMatrix4x4 cvAffine3dToQMatrix4x4(bool valid, const cv::Affine3d& affine) {
 	if (!valid) {
 		return QMatrix4x4();
@@ -177,33 +156,29 @@ QMatrix4x4 cvAffine3dToQMatrix4x4(bool valid, const cv::Affine3d& affine) {
 	return matrix;
 }
 
-void Tracker::track() {
-	inputs.readSwap();
-	const auto& input(inputs.readBuffer());
-
-	if (std::isnan(input.rotation[0]) && std::isnan(input.rotation[1]) && std::isnan(input.rotation[2])) {
-		// nan nan nan, Batman!
-		tracker.update(input.image, nullptr);
-	} else {
-		// TODO: compute rotation matrix
-		tracker.update(input.image, nullptr);
-	}
-	const auto& detection(tracker.getDetectionInfo());
-
-	auto& output(outputs.writeBuffer());
-
-	output.rotation = input.rotation;
-	output.robotPose = cvAffine3dToQMatrix4x4(detection.mRobotDetection.isFound(), detection.mRobotDetection.getPose());
-	output.landmarkPoses.clear();
-	output.landmarkPoses.reserve(detection.landmarkDetections.size());
-	for (const auto& landmark : detection.landmarkDetections) {
-		output.landmarkPoses.push_back(cvAffine3dToQMatrix4x4(!landmark.getHomography().empty(), landmark.getPose()));
-	}
-
-	if (!outputs.writeSwap()) {
-		emit tracked();
-	}
+void rotatePose(QMatrix4x4& pose, const QQuaternion& quaternion) {
+	pose.rotate(quaternion);
+	auto translation(quaternion.rotatedVector(pose.column(3).toVector3D()));
+	pose.setColumn(3, QVector4D(translation, 1));
 }
+
+
+
+
+struct Input {
+	QVector3D rotation;
+	cv::Mat image;
+};
+
+struct OutputRobot {
+	QVector3D rotation;
+	QMatrix4x4 pose;
+};
+
+struct OutputLandmarks {
+	QVector3D rotation;
+	QList<QMatrix4x4> poses;
+};
 
 
 
@@ -215,72 +190,68 @@ public:
 	QVideoFrame run(QVideoFrame* input, const QVideoSurfaceFormat& surfaceFormat, RunFlags flags);
 private:
 	VisionVideoFilter* filter;
-	QThread thread;
-	Tracker tracker;
-	cv::Mat temp1;
-	cv::Mat temp2;
+	thymio_tracker::ThymioTracker tracker;
+
+	QThread threadRobot;
+	QThread threadLandmarks;
+	Runnable runnableRobot;
+	Runnable runnableLandmarks;
+	TripleBuffer<Input> inputRobot;
+	TripleBuffer<Input> inputLandmarks;
+	TripleBuffer<OutputRobot> outputRobot;
+	TripleBuffer<OutputLandmarks> outputLandmarks;
+	bool trackRobot();
+	bool trackLandmarks();
+	void trackedRobot();
+	void trackedLandmarks();
+
 	QOpenGLExtraFunctions* gl;
 	QOpenGLShaderProgram program;
 	GLint imageLocation;
 	GLuint framebuffer;
 	GLuint renderbuffer;
+
+	cv::Mat temp1;
+	cv::Mat temp2;
 };
 
 VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::FileStorage& calibration, cv::FileStorage& geomHashing, cv::FileStorage& robotModel, std::vector<cv::FileStorage>& landmarks)
-		: filter(f), tracker(calibration, geomHashing, robotModel, landmarks), gl(nullptr) {
-	tracker.moveToThread(&thread);
-
-	auto update([this]() {
-		const auto& output(tracker.outputBuffer());
-
-		filter->robotPose = output.robotPose;
-		filter->landmarkPoses.clear();
-
-		auto reading(filter->sensor.reading());
-		if (reading != nullptr) {
-			auto rotation(QVector3D(reading->x(), reading->y(), reading->z()));
-			auto diff(output.rotation - rotation);
-			auto quaternion(QQuaternion::fromEulerAngles(diff));
-
-			auto rotate([quaternion](QMatrix4x4& affine) {
-				affine.rotate(quaternion);
-				affine.setColumn(3, QVector4D(quaternion.rotatedVector(affine.column(3).toVector3D()), 1));
-			});
-
-			rotate(filter->robotPose);
-			for (auto landmarkPose : output.landmarkPoses) {
-				rotate(landmarkPose);
-				filter->landmarkPoses.append(QVariant::fromValue(landmarkPose));
-			}
-		} else {
-			for (auto& landmarkPose : output.landmarkPoses) {
-				filter->landmarkPoses.append(QVariant::fromValue(landmarkPose));
-			}
-		}
-
-		emit filter->updated();
-	});
-
-	QObject::connect(&tracker, &Tracker::tracked, filter, [this, update]() {
-		tracker.outputSwap();
-		update();
+		: filter(f)
+		, tracker(calibration, geomHashing, robotModel, landmarks)
+		, runnableRobot(threadRobot, std::bind(&VisionVideoFilterRunnable::trackRobot, this))
+		, runnableLandmarks(threadLandmarks, std::bind(&VisionVideoFilterRunnable::trackLandmarks, this))
+		, gl(nullptr) {
+	QObject::connect(&runnableRobot, &Runnable::ran, filter, [this]() {
+		outputRobot.readSwap();
+		trackedRobot();
 	}, Qt::QueuedConnection);
 
-	QObject::connect(&filter->sensor, &QSensor::readingChanged, filter, update);
+	QObject::connect(&runnableLandmarks, &Runnable::ran, filter, [this]() {
+		outputLandmarks.readSwap();
+		trackedLandmarks();
+	}, Qt::QueuedConnection);
 
-	thread.start();
+	QObject::connect(&filter->sensor, &QSensor::readingChanged, filter, [this]() {
+		trackedRobot();
+		trackedLandmarks();
+	});
+
+	threadRobot.start();
+	threadLandmarks.start();
 }
 
 VisionVideoFilterRunnable::~VisionVideoFilterRunnable() {
-	thread.quit();
-	thread.wait();
+	threadRobot.quit();
+	threadLandmarks.quit();
+	threadRobot.wait();
+	threadLandmarks.wait();
 }
 
 QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideoSurfaceFormat& surfaceFormat, RunFlags flags) {
 	Q_UNUSED(surfaceFormat);
 	Q_UNUSED(flags);
 
-	auto& input(tracker.inputBuffer());
+	auto& input(inputRobot.writeBuffer());
 
 	auto inputReading(filter->sensor.reading());
 	if (inputReading != nullptr) {
@@ -421,7 +392,14 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 	first = false;
 #endif
 
-	tracker.inputSwap();
+	inputLandmarks.writeBuffer() = input;
+
+	if (!inputRobot.writeSwap()) {
+		runnableRobot.invoke();
+	}
+	if (!inputLandmarks.writeSwap()) {
+		runnableLandmarks.invoke();
+	}
 
 /**/
 	return *inputFrame;
@@ -435,6 +413,93 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 	frame.unmap();
 	return frame;
 /**/
+}
+
+bool VisionVideoFilterRunnable::trackRobot() {
+	inputRobot.readSwap();
+	const auto& input(inputRobot.readBuffer());
+
+	if (std::isnan(input.rotation[0]) && std::isnan(input.rotation[1]) && std::isnan(input.rotation[2])) {
+		// nan nan nan, Batman!
+		tracker.updateRobot(input.image, nullptr);
+	} else {
+		// TODO: compute rotation matrix
+		tracker.updateRobot(input.image, nullptr);
+	}
+	const auto& detection(tracker.getDetectionInfo());
+
+	auto& output(outputRobot.writeBuffer());
+
+	output.rotation = input.rotation;
+	output.pose = cvAffine3dToQMatrix4x4(detection.mRobotDetection.isFound(), detection.mRobotDetection.getPose());
+
+	return !outputRobot.writeSwap();
+}
+
+bool VisionVideoFilterRunnable::trackLandmarks() {
+	inputLandmarks.readSwap();
+	const auto& input(inputLandmarks.readBuffer());
+
+	if (std::isnan(input.rotation[0]) && std::isnan(input.rotation[1]) && std::isnan(input.rotation[2])) {
+		// nan nan nan, Batman!
+		tracker.updateLandmarks(input.image, nullptr);
+	} else {
+		// TODO: compute rotation matrix
+		tracker.updateLandmarks(input.image, nullptr);
+	}
+	const auto& detection(tracker.getDetectionInfo());
+
+	auto& output(outputLandmarks.writeBuffer());
+
+	output.rotation = input.rotation;
+	output.poses.clear();
+	output.poses.reserve(detection.landmarkDetections.size());
+	for (const auto& landmark : detection.landmarkDetections) {
+		output.poses.push_back(cvAffine3dToQMatrix4x4(landmark.isFound(), landmark.getPose()));
+	}
+
+	return !outputLandmarks.writeSwap();
+}
+
+void VisionVideoFilterRunnable::trackedRobot() {
+	const auto& output(outputRobot.readBuffer());
+
+	filter->robotPose = output.pose;
+
+	auto reading(filter->sensor.reading());
+	if (reading != nullptr) {
+		auto rotation(QVector3D(reading->x(), reading->y(), reading->z()));
+		auto diff(output.rotation - rotation);
+		auto quaternion(QQuaternion::fromEulerAngles(diff));
+
+		rotatePose(filter->robotPose, quaternion);
+	}
+
+	emit filter->updatedRobot();
+}
+
+void VisionVideoFilterRunnable::trackedLandmarks() {
+	const auto& output(outputLandmarks.readBuffer());
+
+	filter->landmarkPoses.clear();
+
+	auto reading(filter->sensor.reading());
+	if (reading != nullptr) {
+		auto rotation(QVector3D(reading->x(), reading->y(), reading->z()));
+		auto diff(output.rotation - rotation);
+		auto quaternion(QQuaternion::fromEulerAngles(diff));
+
+		for (auto pose : output.poses) {
+			rotatePose(pose, quaternion);
+			filter->landmarkPoses.append(QVariant::fromValue(pose));
+		}
+	} else {
+		for (auto& pose : output.poses) {
+			filter->landmarkPoses.append(QVariant::fromValue(pose));
+		}
+	}
+
+	emit filter->updatedLandmarks();
 }
 
 

@@ -9,9 +9,14 @@ Item {
 	id: vision
 
 	default property alias data: frameGraph.data
+
 	property alias landmarkFileNames: filter.landmarkFileNames
+
 	property alias robotPose: filter.robotPose
 	property alias landmarkPoses: filter.landmarkPoses
+
+	property alias calibrationRunning: filter.calibrationRunning
+	property alias calibrationProgress: filter.calibrationProgress
 
 	readonly property matrix4x4 invalidPose: Qt.matrix4x4()
 

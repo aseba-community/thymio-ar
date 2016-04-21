@@ -447,6 +447,16 @@ bool VisionVideoFilterRunnable::trackLandmarks() {
 		// TODO: compute rotation matrix
 		tracker.updateLandmarks(input.image, nullptr);
 	}
+
+	if (filter->calibrationRunning) {
+		if (tracker.updateCalibration()) {
+			filter->calibrationRunning = false;
+			filter->calibrationProgress = 1.0;
+		} else {
+			filter->calibrationProgress = tracker.getCalibrationInfo().getProgress();
+		}
+	}
+
 	const auto& detection(tracker.getDetectionInfo());
 
 	auto& output(outputLandmarks.writeBuffer());

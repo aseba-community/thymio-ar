@@ -38,29 +38,23 @@ Item {
 
 		Entity {
 			id: frameGraph
-			components: FrameGraph {
-				Viewport {
-					rect: Qt.rect(0, 0, 1, 1)
+			components: RenderSettings {
+				ForwardRenderer {
+					viewportRect: Qt.rect(0, 0, 1, 1)
 					clearColor: Qt.rgba(0, 0, 0, 0)
-					CameraSelector {
-						camera: Entity {
-							components: [
-								CameraLens {
-									projectionType: CameraLens.PerspectiveProjection
-									fieldOfView: 45
-									nearPlane : 0.01
-									farPlane : 1000.0
-									aspectRatio: vision.width / vision.height
-								},
-								Transform {
-									matrix: landmarkPoses[0]
-								}
-							]
-						}
-
-						ClearBuffer {
-							buffers: ClearBuffer.ColorDepthBuffer
-						}
+					camera: Entity {
+						components: [
+							CameraLens {
+								projectionType: CameraLens.PerspectiveProjection
+								fieldOfView: 45
+								nearPlane : 0.01
+								farPlane : 1000.0
+								aspectRatio: vision.width / vision.height
+							},
+							Transform {
+								matrix: landmarkPoses[0]
+							}
+						]
 					}
 				}
 			}

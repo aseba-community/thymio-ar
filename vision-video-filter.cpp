@@ -157,6 +157,15 @@ QMatrix4x4 cvAffine3dToQMatrix4x4(bool valid, const cv::Affine3d& affine) {
 	return matrix;
 }
 
+cv::Matx33f eulerAnglesToRotationMatrix(const QVector3D rotation) {
+	auto matrix(QQuaternion::fromEulerAngles(rotation).toRotationMatrix());
+	return cv::Matx33f(
+	    matrix(0, 0), matrix(0, 1), matrix(0, 2),
+	    -matrix(1, 0), -matrix(1, 1), -matrix(1, 2),
+	    -matrix(2, 0), -matrix(2, 1), -matrix(2, 2)
+	);
+}
+
 void rotatePose(QMatrix4x4& pose, const QQuaternion& quaternion) {
 	pose.rotate(quaternion);
 	auto translation(quaternion.rotatedVector(pose.column(3).toVector3D()));
@@ -424,8 +433,8 @@ bool VisionVideoFilterRunnable::trackRobot() {
 		// nan nan nan, Batman!
 		tracker.updateRobot(input.image, nullptr);
 	} else {
-		// TODO: compute rotation matrix
-		tracker.updateRobot(input.image, nullptr);
+		cv::Mat matrix(eulerAnglesToRotationMatrix(input.rotation));
+		tracker.updateRobot(input.image, &matrix);
 	}
 	const auto& detection(tracker.getDetectionInfo());
 
@@ -445,8 +454,8 @@ bool VisionVideoFilterRunnable::trackLandmarks() {
 		// nan nan nan, Batman!
 		tracker.updateLandmarks(input.image, nullptr);
 	} else {
-		// TODO: compute rotation matrix
-		tracker.updateLandmarks(input.image, nullptr);
+		cv::Mat matrix(eulerAnglesToRotationMatrix(input.rotation));
+		tracker.updateLandmarks(input.image, &matrix);
 	}
 
 	if (filter->calibrationRunning) {

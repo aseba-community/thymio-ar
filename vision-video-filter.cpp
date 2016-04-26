@@ -4,6 +4,7 @@
 #include <functional>
 #include <QDebug>
 #include <QFile>
+#include <QSettings>
 #include <QThread>
 #include <QOpenGLExtraFunctions>
 #include <QOpenGLShaderProgram>
@@ -449,11 +450,18 @@ bool VisionVideoFilterRunnable::trackLandmarks() {
 	}
 
 	if (filter->calibrationRunning) {
-		if (tracker.updateCalibration()) {
+		if (!tracker.updateCalibration()) {
+			filter->calibrationProgress = tracker.getCalibrationInfo().getProgress();
+		} else {
 			filter->calibrationRunning = false;
 			filter->calibrationProgress = 1.0;
-		} else {
-			filter->calibrationProgress = tracker.getCalibrationInfo().getProgress();
+
+			cv::FileStorage storage("calibration.xml", cv::FileStorage::WRITE | cv::FileStorage::MEMORY);
+			tracker.writeCalibration(storage);
+			auto calibration(QString::fromStdString(storage.releaseAndGetString()));
+
+			QSettings settings;
+			settings.setValue("thymio-ar/calibration.xml", calibration);
 		}
 	}
 
@@ -528,8 +536,18 @@ static std::string readFile(QString path) {
 	return file.readAll().toStdString();
 }
 
+static std::string readSettingFile(QString path) {
+	static QSettings settings;
+	auto variant(settings.value(path));
+	if (variant.isValid()) {
+		return variant.value<QString>().toStdString();
+	}
+
+	return readFile(":/" + path);
+}
+
 QVideoFilterRunnable* VisionVideoFilter::createFilterRunnable() {
-	cv::FileStorage calibration(readFile(":/thymio-ar/calibration.xml"), cv::FileStorage::READ | cv::FileStorage::MEMORY);
+	cv::FileStorage calibration(readSettingFile("thymio-ar/calibration.xml"), cv::FileStorage::READ | cv::FileStorage::MEMORY);
 	cv::FileStorage geomHashing(readFile(":/thymio-ar/geomHashing.xml"), cv::FileStorage::READ | cv::FileStorage::MEMORY);
 	cv::FileStorage robotModel(readFile(":/thymio-ar/robotModel.xml"), cv::FileStorage::READ | cv::FileStorage::MEMORY);
 	std::vector<cv::FileStorage> landmarks;

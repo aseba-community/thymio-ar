@@ -157,13 +157,18 @@ QMatrix4x4 cvAffine3dToQMatrix4x4(bool valid, const cv::Affine3d& affine) {
 	return matrix;
 }
 
-cv::Matx33f eulerAnglesToRotationMatrix(const QVector3D rotation) {
+cv::Mat eulerAnglesToRotationMatrix(const QVector3D& rotation) {
+	if (std::isnan(rotation[0]) && std::isnan(rotation[1]) && std::isnan(rotation[2])) {
+		// nan nan nan, Batman!
+		return cv::Mat();
+	}
 	auto matrix(QQuaternion::fromEulerAngles(rotation).toRotationMatrix());
-	return cv::Matx33f(
+	cv::Matx33f matx(
 	    matrix(0, 0), matrix(0, 1), matrix(0, 2),
 	    -matrix(1, 0), -matrix(1, 1), -matrix(1, 2),
 	    -matrix(2, 0), -matrix(2, 1), -matrix(2, 2)
 	);
+	return cv::Mat(matx);
 }
 
 void rotatePose(QMatrix4x4& pose, const QQuaternion& quaternion) {
@@ -171,6 +176,74 @@ void rotatePose(QMatrix4x4& pose, const QQuaternion& quaternion) {
 	auto translation(quaternion.rotatedVector(pose.column(3).toVector3D()));
 	pose.setColumn(3, QVector4D(translation, 1));
 }
+
+
+
+
+struct CalibrationPose {
+	cv::Point2f center;
+	std::vector<float> angles;
+	CalibrationPose(const std::vector<cv::Point2f>& points) {
+		auto prev(points.back());
+		for (auto it(points.begin()); it != points.end(); ++it) {
+			auto& point(*it);
+			center += point;
+
+			auto diff(point - prev);
+			angles.push_back(std::atan2(diff.y, diff.x));
+			prev = point;
+		}
+		center /= float(points.size());
+		std::sort(angles.begin(), angles.end());
+	}
+	bool operator==(const CalibrationPose& that) {
+		auto center(cv::norm(this->center - that.center));
+		if (center > 0.2) {
+			return false;
+		}
+
+		auto angles(cv::norm(this->angles, that.angles));
+		if (angles > 0.2) {
+			return false;
+		}
+
+		return true;
+	}
+	bool operator!=(const CalibrationPose& that) {
+		return !(*this == that);
+	}
+};
+
+struct CalibrationExpect {
+	bool right;
+	QMatrix4x4 transform;
+	CalibrationPose pose;
+	CalibrationExpect(bool right, QPointF a, QPointF b, QPointF c, QPointF d)
+	    : right(right)
+	    , transform(squareToQuad(QVector<QPointF> {a, b, c, d}))
+	    , pose(std::vector<cv::Point2f> { p(a), p(b), p(c), p(d) }) {
+	}
+private:
+	static QTransform squareToQuad(QPolygonF quad) {
+		QTransform transform;
+		if (!QTransform::squareToQuad(quad, transform)) {
+			qFatal("argl!");
+		}
+		return transform;
+	}
+	static cv::Point2f p(const QPointF& point) {
+		return cv::Point2f(point.x(), point.y());
+	}
+};
+
+static const std::vector<CalibrationExpect> calibrationExpects {
+	{false, {0.8, 0.8}, {0.2, 0.8}, {0.2, 0.2}, {0.8, 0.2}},
+	{true, {0.8, 0.8}, {0.2, 0.8}, {0.2, 0.2}, {0.8, 0.2}},
+	{false, {0.8, 0.9}, {0.2, 0.8}, {0.2, 0.2}, {0.8, 0.1}},
+	{true, {0.8, 0.9}, {0.2, 0.8}, {0.2, 0.2}, {0.8, 0.1}},
+	{false, {0.9, 0.8}, {0.1, 0.8}, {0.2, 0.2}, {0.8, 0.2}},
+	{true, {0.9, 0.8}, {0.1, 0.8}, {0.2, 0.2}, {0.8, 0.2}},
+};
 
 
 
@@ -214,6 +287,10 @@ private:
 	bool trackLandmarks();
 	void trackedRobot();
 	void trackedLandmarks();
+	void updateCalibration(const cv::Mat &input);
+	void updateCalibrationExpect();
+
+	size_t calibrationState;
 
 	QOpenGLExtraFunctions* gl;
 	QOpenGLShaderProgram program;
@@ -230,7 +307,10 @@ VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::F
 		, tracker(calibration, geomHashing, robotModel, landmarks)
 		, runnableRobot(threadRobot, std::bind(&VisionVideoFilterRunnable::trackRobot, this))
 		, runnableLandmarks(threadLandmarks, std::bind(&VisionVideoFilterRunnable::trackLandmarks, this))
+		, calibrationState(0)
 		, gl(nullptr) {
+	updateCalibrationExpect();
+
 	QObject::connect(&runnableRobot, &Runnable::ran, filter, [this]() {
 		outputRobot.readSwap();
 		trackedRobot();
@@ -411,7 +491,7 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 		runnableLandmarks.invoke();
 	}
 
-/**/
+/*/
 	return *inputFrame;
 /*/
 	QVideoFrame frame(input.image.size().area()*3/2, QSize(input.image.cols, input.image.rows), input.image.step, QVideoFrame::Format_YUV420P);
@@ -429,18 +509,13 @@ bool VisionVideoFilterRunnable::trackRobot() {
 	inputRobot.readSwap();
 	const auto& input(inputRobot.readBuffer());
 
-	if (std::isnan(input.rotation[0]) && std::isnan(input.rotation[1]) && std::isnan(input.rotation[2])) {
-		// nan nan nan, Batman!
-		tracker.updateRobot(input.image, nullptr);
-	} else {
-		cv::Mat matrix(eulerAnglesToRotationMatrix(input.rotation));
-		tracker.updateRobot(input.image, &matrix);
-	}
-	const auto& detection(tracker.getDetectionInfo());
+	auto rotation(eulerAnglesToRotationMatrix(input.rotation));
+	tracker.updateRobot(input.image, rotation.empty() ? nullptr : &rotation);
 
 	auto& output(outputRobot.writeBuffer());
-
 	output.rotation = input.rotation;
+
+	const auto& detection(tracker.getDetectionInfo());
 	output.pose = cvAffine3dToQMatrix4x4(detection.mRobotDetection.isFound(), detection.mRobotDetection.getPose());
 
 	return !outputRobot.writeSwap();
@@ -450,39 +525,22 @@ bool VisionVideoFilterRunnable::trackLandmarks() {
 	inputLandmarks.readSwap();
 	const auto& input(inputLandmarks.readBuffer());
 
-	if (std::isnan(input.rotation[0]) && std::isnan(input.rotation[1]) && std::isnan(input.rotation[2])) {
-		// nan nan nan, Batman!
-		tracker.updateLandmarks(input.image, nullptr);
-	} else {
-		cv::Mat matrix(eulerAnglesToRotationMatrix(input.rotation));
-		tracker.updateLandmarks(input.image, &matrix);
-	}
-
-	if (filter->calibrationRunning) {
-		if (!tracker.updateCalibration()) {
-			filter->calibrationProgress = tracker.getCalibrationInfo().getProgress();
-		} else {
-			filter->calibrationRunning = false;
-			filter->calibrationProgress = 1.0;
-
-			cv::FileStorage storage("calibration.xml", cv::FileStorage::WRITE | cv::FileStorage::MEMORY);
-			tracker.writeCalibration(storage);
-			auto calibration(QString::fromStdString(storage.releaseAndGetString()));
-
-			QSettings settings;
-			settings.setValue("thymio-ar/calibration.xml", calibration);
-		}
-	}
-
-	const auto& detection(tracker.getDetectionInfo());
+	auto rotation(eulerAnglesToRotationMatrix(input.rotation));
+	tracker.updateLandmarks(input.image, rotation.empty() ? nullptr : &rotation);
+//	qWarning() << tracker.getTimer().getFps();
 
 	auto& output(outputLandmarks.writeBuffer());
-
 	output.rotation = input.rotation;
+
+	const auto& detection(tracker.getDetectionInfo());
 	output.poses.clear();
 	output.poses.reserve(detection.landmarkDetections.size());
 	for (const auto& landmark : detection.landmarkDetections) {
 		output.poses.push_back(cvAffine3dToQMatrix4x4(landmark.isFound(), landmark.getPose()));
+	}
+
+	if (filter->calibrationRunning) {
+		updateCalibration(input.image);
 	}
 
 	return !outputLandmarks.writeSwap();
@@ -527,6 +585,66 @@ void VisionVideoFilterRunnable::trackedLandmarks() {
 	}
 
 	emit filter->updatedLandmarks();
+}
+
+void VisionVideoFilterRunnable::updateCalibration(const cv::Mat& input) {
+	const auto& detections(tracker.getDetectionInfo().landmarkDetections);
+	if (detections.empty()) {
+		// no landmark
+		return;
+	}
+
+	const auto& detection(detections.front());
+	if (!detection.isFound()) {
+		// invisible landmark
+		return;
+	}
+
+	const auto& landmark(tracker.getLandmarks().front());
+
+	std::vector<cv::Point2f> landmarkCorners;
+	cv::perspectiveTransform(landmark.getCorners(), landmarkCorners, detection.getHomography());
+	CalibrationPose landmarkPose(landmarkCorners);
+
+	auto size(input.size());
+	if (filter->calibrationRight) {
+		landmarkPose.center.x += size.height - size.width;
+	}
+	landmarkPose.center /= float(size.height);
+
+	const auto& calibrationPose(calibrationExpects[calibrationState].pose);
+	if (landmarkPose != calibrationPose) {
+		// wrong pose
+		return;
+	}
+
+	if (!tracker.updateCalibration()) {
+		calibrationState += 1;
+		calibrationState %= calibrationExpects.size();
+		filter->calibrationProgress = tracker.getCalibrationInfo().getProgress();
+		filter->calibrationDone = false;
+	} else {
+		calibrationState = 0;
+		filter->calibrationRunning = false;
+		filter->calibrationProgress = 1.0;
+		filter->calibrationDone = true;
+
+		cv::FileStorage storage("calibration.xml", cv::FileStorage::WRITE | cv::FileStorage::MEMORY);
+		tracker.writeCalibration(storage);
+		auto calibration(QString::fromStdString(storage.releaseAndGetString()));
+
+		QSettings settings;
+		settings.setValue("thymio-ar/calibration.xml", calibration);
+	}
+
+	updateCalibrationExpect();
+}
+
+void VisionVideoFilterRunnable::updateCalibrationExpect() {
+	auto& calibrationExpect(calibrationExpects[calibrationState]);
+	filter->calibrationRight = calibrationExpect.right;
+	filter->calibrationTransform = calibrationExpect.transform;
+	emit filter->updatedCalibration();
 }
 
 

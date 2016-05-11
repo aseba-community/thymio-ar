@@ -11,8 +11,11 @@ class VisionVideoFilter : public QAbstractVideoFilter {
 	Q_PROPERTY(QStringList landmarkFileNames MEMBER landmarkFileNames)
 	Q_PROPERTY(const QMatrix4x4 robotPose MEMBER robotPose NOTIFY updatedRobot)
 	Q_PROPERTY(const QVariantList& landmarkPoses READ getLandmarkPoses NOTIFY updatedLandmarks)
-	Q_PROPERTY(const bool calibrationRunning MEMBER calibrationRunning NOTIFY updatedLandmarks)
-	Q_PROPERTY(const float calibrationProgress MEMBER calibrationProgress NOTIFY updatedLandmarks)
+	Q_PROPERTY(const bool calibrationRunning MEMBER calibrationRunning NOTIFY updatedCalibration)
+	Q_PROPERTY(const float calibrationProgress MEMBER calibrationProgress NOTIFY updatedCalibration)
+	Q_PROPERTY(const bool calibrationDone MEMBER calibrationDone NOTIFY updatedCalibration)
+	Q_PROPERTY(const bool calibrationRight MEMBER calibrationRight NOTIFY updatedCalibration)
+	Q_PROPERTY(const QMatrix4x4 calibrationTransform MEMBER calibrationTransform NOTIFY updatedCalibration)
 public:
     explicit VisionVideoFilter(QObject* parent = 0);
 	QVideoFilterRunnable* createFilterRunnable();
@@ -25,9 +28,13 @@ public:
 
 	bool calibrationRunning = false;
 	float calibrationProgress = 0.0;
+	bool calibrationDone = false;
+	bool calibrationRight = false;
+	QMatrix4x4 calibrationTransform;
 signals:
 	void updatedRobot();
 	void updatedLandmarks();
+	void updatedCalibration();
 };
 
 #endif // VISION_H

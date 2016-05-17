@@ -440,21 +440,22 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 		auto convert(cvtCode != cv::COLOR_COLORCVT_MAX);
 		auto flip(surfaceFormat.scanLineDirection() == QVideoSurfaceFormat::BottomToTop || QSysInfo::productType() == "android");
 
+		auto inter(cv::INTER_AREA);
 		if (resize && convert && flip) {
 			cv::cvtColor(inputMat, temp1, cvtCode, outputType);
-			cv::resize(temp1, temp2, outputSize);
+			cv::resize(temp1, temp2, outputSize, 0, 0, inter);
 			cv::flip(temp2, input.image, 0);
 		} else if (resize && convert) {
 			cv::cvtColor(inputMat, temp1, cvtCode, outputType);
-			cv::resize(temp1, input.image, outputSize);
+			cv::resize(temp1, input.image, outputSize, 0, 0, inter);
 		} else if (resize && flip) {
-			cv::resize(inputMat, temp1, outputSize);
+			cv::resize(inputMat, temp1, outputSize, 0, 0, inter);
 			cv::flip(temp1, input.image, 0);
 		} else if (convert && flip) {
 			cv::cvtColor(inputMat, temp1, cvtCode, outputType);
 			cv::flip(temp1, input.image, 0);
 		} else if (resize) {
-			cv::resize(inputMat, input.image, outputSize);
+			cv::resize(inputMat, input.image, outputSize, 0, 0, inter);
 		} else if (convert) {
 			cv::cvtColor(inputMat, input.image, cvtCode, outputType);
 		} else if (flip) {

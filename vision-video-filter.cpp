@@ -404,6 +404,8 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 
 		gl->glActiveTexture(GL_TEXTURE0);
 		gl->glBindTexture(QOpenGLTexture::Target2D, inputFrame->handle().toUInt());
+		gl->glGenerateMipmap(QOpenGLTexture::Target2D);
+		gl->glTexParameteri(QOpenGLTexture::Target2D, GL_TEXTURE_MIN_FILTER, QOpenGLTexture::LinearMipMapLinear);
 
 		program.bind();
 		program.setUniformValue(imageLocation, 0);

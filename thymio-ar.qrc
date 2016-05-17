@@ -6,5 +6,6 @@
         <file alias="calibration.xml">thymio-tracker/data/calibration/embedded_camera_calib.xml</file>
         <file alias="geomHashing.xml">thymio-tracker/data/GHscale_Arth_Perspective.xml</file>
         <file alias="robotModel.xml">thymio-tracker/data/robot/robotTrackInfo.xml</file>
+        <file>Scene3d.qml</file>
     </qresource>
 </RCC>

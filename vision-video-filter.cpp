@@ -366,24 +366,24 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 
 			QString vertex(version);
 			vertex += R"(
-				out vec2 coord;
-				void main(void) {
-					int id = gl_VertexID;
-					coord = vec2((id << 1) & 2, id & 2);
-					gl_Position = vec4(coord * 2.0 - 1.0, 0.0, 1.0);
-				}
+			    out vec2 coord;
+			    void main(void) {
+			        int id = gl_VertexID;
+			        coord = vec2((id << 1) & 2, id & 2);
+			        gl_Position = vec4(coord * 2.0 - 1.0, 0.0, 1.0);
+			    }
 			)";
 
 			QString fragment(version);
 			fragment += R"(
-				in lowp vec2 coord;
-				uniform sampler2D image;
-				const lowp vec3 luma = vec3(0.2126, 0.7152, 0.0722);
-				out lowp float fragment;
-				void main(void) {
-					lowp vec3 color = texture(image, coord).rgb;
-					fragment = dot(color, luma);
-				}
+			    in lowp vec2 coord;
+			    uniform sampler2D image;
+			    const lowp vec3 luma = vec3(0.2126, 0.7152, 0.0722);
+			    out lowp float fragment;
+			    void main(void) {
+			           lowp vec3 color = texture(image, coord).rgb;
+			           fragment = dot(color, luma);
+			    }
 			)";
 
 			program.addShaderFromSourceCode(QOpenGLShader::Vertex, vertex);

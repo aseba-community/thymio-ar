@@ -480,9 +480,9 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 				<< input.image.data[0x14] << input.image.data[0x15] << input.image.data[0x16] << input.image.data[0x17]
 				<< input.image.data[0x18] << input.image.data[0x19] << input.image.data[0x1A] << input.image.data[0x1B]
 				<< input.image.data[0x1C] << input.image.data[0x1D] << input.image.data[0x1E] << input.image.data[0x1F];
-		cv::imwrite(QSysInfo::productType() == "android" ? "/storage/emulated/0/DCIM/100ANDRO/toto.png" : "toto.png", input.image);
+		cv::imwrite(QSysInfo::productType() == "android" ? "/storage/emulated/0/DCIM/100ANDRO/tracker.png" : "tracker.png", input.image);
+		first = false;
 	}
-	first = false;
 #endif
 
 	inputLandmarks.writeBuffer() = input;

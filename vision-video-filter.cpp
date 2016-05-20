@@ -366,24 +366,24 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 
 			QString vertex(version);
 			vertex += R"(
-				out vec2 coord;
-				void main(void) {
-					int id = gl_VertexID;
-					coord = vec2((id << 1) & 2, id & 2);
-					gl_Position = vec4(coord * 2.0 - 1.0, 0.0, 1.0);
-				}
+			    out vec2 coord;
+			    void main(void) {
+			        int id = gl_VertexID;
+			        coord = vec2((id << 1) & 2, id & 2);
+			        gl_Position = vec4(coord * 2.0 - 1.0, 0.0, 1.0);
+			    }
 			)";
 
 			QString fragment(version);
 			fragment += R"(
-				in lowp vec2 coord;
-				uniform sampler2D image;
-				const lowp vec3 luma = vec3(0.2126, 0.7152, 0.0722);
-				out lowp float fragment;
-				void main(void) {
-					lowp vec3 color = texture(image, coord).rgb;
-					fragment = dot(color, luma);
-				}
+			    in lowp vec2 coord;
+			    uniform sampler2D image;
+			    const lowp vec3 luma = vec3(0.2126, 0.7152, 0.0722);
+			    out lowp float fragment;
+			    void main(void) {
+			           lowp vec3 color = texture(image, coord).rgb;
+			           fragment = dot(color, luma);
+			    }
 			)";
 
 			program.addShaderFromSourceCode(QOpenGLShader::Vertex, vertex);
@@ -404,6 +404,8 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 
 		gl->glActiveTexture(GL_TEXTURE0);
 		gl->glBindTexture(QOpenGLTexture::Target2D, inputFrame->handle().toUInt());
+		gl->glGenerateMipmap(QOpenGLTexture::Target2D);
+		gl->glTexParameteri(QOpenGLTexture::Target2D, GL_TEXTURE_MIN_FILTER, QOpenGLTexture::LinearMipMapLinear);
 
 		program.bind();
 		program.setUniformValue(imageLocation, 0);
@@ -438,21 +440,22 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 		auto convert(cvtCode != cv::COLOR_COLORCVT_MAX);
 		auto flip(surfaceFormat.scanLineDirection() == QVideoSurfaceFormat::BottomToTop || QSysInfo::productType() == "android");
 
+		auto inter(cv::INTER_AREA);
 		if (resize && convert && flip) {
 			cv::cvtColor(inputMat, temp1, cvtCode, outputType);
-			cv::resize(temp1, temp2, outputSize);
+			cv::resize(temp1, temp2, outputSize, 0, 0, inter);
 			cv::flip(temp2, input.image, 0);
 		} else if (resize && convert) {
 			cv::cvtColor(inputMat, temp1, cvtCode, outputType);
-			cv::resize(temp1, input.image, outputSize);
+			cv::resize(temp1, input.image, outputSize, 0, 0, inter);
 		} else if (resize && flip) {
-			cv::resize(inputMat, temp1, outputSize);
+			cv::resize(inputMat, temp1, outputSize, 0, 0, inter);
 			cv::flip(temp1, input.image, 0);
 		} else if (convert && flip) {
 			cv::cvtColor(inputMat, temp1, cvtCode, outputType);
 			cv::flip(temp1, input.image, 0);
 		} else if (resize) {
-			cv::resize(inputMat, input.image, outputSize);
+			cv::resize(inputMat, input.image, outputSize, 0, 0, inter);
 		} else if (convert) {
 			cv::cvtColor(inputMat, input.image, cvtCode, outputType);
 		} else if (flip) {
@@ -477,9 +480,9 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 				<< input.image.data[0x14] << input.image.data[0x15] << input.image.data[0x16] << input.image.data[0x17]
 				<< input.image.data[0x18] << input.image.data[0x19] << input.image.data[0x1A] << input.image.data[0x1B]
 				<< input.image.data[0x1C] << input.image.data[0x1D] << input.image.data[0x1E] << input.image.data[0x1F];
-		cv::imwrite(QSysInfo::productType() == "android" ? "/storage/emulated/0/DCIM/100ANDRO/toto.png" : "toto.png", input.image);
+		cv::imwrite(QSysInfo::productType() == "android" ? "/storage/emulated/0/DCIM/100ANDRO/tracker.png" : "tracker.png", input.image);
+		first = false;
 	}
-	first = false;
 #endif
 
 	inputLandmarks.writeBuffer() = input;

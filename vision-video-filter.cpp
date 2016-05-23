@@ -161,8 +161,12 @@ static TrackerResult affineToTrackerResult(bool found, float confidence, const c
 	return result;
 }
 
+bool isRotationValid(const QVector3D& rotation) {
+	return !std::isnan(rotation[0]) && !std::isnan(rotation[1]) && !std::isnan(rotation[2]);
+}
+
 cv::Mat eulerAnglesToRotationMatrix(const QVector3D& rotation) {
-	if (std::isnan(rotation[0]) && std::isnan(rotation[1]) && std::isnan(rotation[2])) {
+	if (!isRotationValid(rotation)) {
 		// nan nan nan, Batman!
 		return cv::Mat();
 	}
@@ -258,12 +262,12 @@ struct Input {
 };
 
 struct OutputRobot {
-	QVector3D rotation;
+	QVector3D rotation = QVector3D(NaN, NaN, NaN);
 	TrackerResult result;
 };
 
 struct OutputLandmarks {
-	QVector3D rotation;
+	QVector3D rotation = QVector3D(NaN, NaN, NaN);
 	QList<TrackerResult> results;
 };
 
@@ -326,8 +330,12 @@ VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::F
 	}, Qt::QueuedConnection);
 
 	QObject::connect(&filter->sensor, &QSensor::readingChanged, filter, [this]() {
-		trackedRobot();
-		trackedLandmarks();
+		if (isRotationValid(outputRobot.readBuffer().rotation)) {
+			trackedRobot();
+		}
+		if (isRotationValid(outputLandmarks.readBuffer().rotation)) {
+			trackedLandmarks();
+		}
 	});
 
 	threadRobot.start();
@@ -534,14 +542,13 @@ bool VisionVideoFilterRunnable::trackLandmarks() {
 
 	auto rotation(eulerAnglesToRotationMatrix(input.rotation));
 	tracker.updateLandmarks(input.image, rotation.empty() ? nullptr : &rotation);
-//	qWarning() << tracker.getTimer().getFps();
 	const auto& detection(tracker.getDetectionInfo().landmarkDetections);
 
 	auto& output(outputLandmarks.writeBuffer());
 	output.rotation = input.rotation;
+
 	output.results.clear();
 	output.results.reserve(detection.size());
-
 	for (auto it(detection.begin()); it != detection.end(); ++it) {
 		output.results.push_back(affineToTrackerResult(it->isFound(), it->getConfidence(), it->getPose()));
 	}
@@ -575,16 +582,9 @@ void VisionVideoFilterRunnable::trackedLandmarks() {
 
 	auto resultsIt(output.results.begin());
 	for (auto landmark : filter->landmarks) {
-		if (resultsIt != output.results.end()) {
-			landmark->result = *resultsIt;
-			++resultsIt;
-		} else {
-			landmark->result = {
-			    found: false,
-			    confidence: 0,
-			    pose: QMatrix4x4()
-			};
-		}
+		assert(resultsIt != output.results.end());
+		landmark->result = *resultsIt;
+		++resultsIt;
 	}
 
 	auto reading(filter->sensor.reading());

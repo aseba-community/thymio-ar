@@ -4,6 +4,7 @@ import ThymioAR 1.0
 Item {
     property var variables: ({})
     property string program: ""
+	property bool playing: false
 
     property var node: {
         for (var i = 0; i < aseba.nodes.length; ++i) {

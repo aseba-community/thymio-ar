@@ -575,9 +575,16 @@ void VisionVideoFilterRunnable::trackedLandmarks() {
 
 	auto resultsIt(output.results.begin());
 	for (auto landmark : filter->landmarks) {
-		assert(resultsIt != output.results.end());
-		landmark->result = *resultsIt;
-		++resultsIt;
+		if (resultsIt != output.results.end()) {
+			landmark->result = *resultsIt;
+			++resultsIt;
+		} else {
+			landmark->result = {
+			    found: false,
+			    confidence: 0,
+			    pose: QMatrix4x4()
+			};
+		}
 	}
 
 	auto reading(filter->sensor.reading());

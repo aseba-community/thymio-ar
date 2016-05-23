@@ -6,6 +6,7 @@
 
 void thymioARInit() {
 	Dashel::initPlugins();
+	qmlRegisterType<Landmark>("ThymioAR", 1, 0, "Landmark");
 	qmlRegisterType<VisionVideoFilter>("ThymioAR", 1, 0, "VisionVideoFilter");
 	qmlRegisterType<AsebaClient>("ThymioAR", 1, 0, "AsebaClient");
 	qmlRegisterType<AsebaClient>("ThymioAR", 1, 0, "AsebaNode");

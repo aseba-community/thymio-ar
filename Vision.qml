@@ -5,6 +5,8 @@ import QtMultimedia 5.5 as QtMultimedia
 Item {
 	id: vision
 
+	property alias camera: camera
+
 	property alias landmarkFileNames: filter.landmarkFileNames
 
 	property alias robotPose: filter.robotPose
@@ -16,11 +18,14 @@ Item {
 
 	readonly property matrix4x4 invalidPose: Qt.matrix4x4()
 
+	QtMultimedia.Camera {
+		id: camera
+		captureMode: QtMultimedia.Camera.CaptureViewfinder
+	}
+
 	QtMultimedia.VideoOutput {
 		anchors.fill: parent
-		source: QtMultimedia.Camera {
-			captureMode: QtMultimedia.Camera.CaptureViewfinder
-		}
+		source: camera
 		filters: [
 			VisionVideoFilter {
 				id: filter

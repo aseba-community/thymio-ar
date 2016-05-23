@@ -143,7 +143,8 @@ static cv::ColorConversionCodes getCvtCode(QVideoFrame::PixelFormat pixelFormat)
 	}
 }
 
-static void setTrackerResult(TrackerResult& result, bool found, float confidence, const cv::Affine3d& affine) {
+static TrackerResult affineToTrackerResult(bool found, float confidence, const cv::Affine3d& affine) {
+	TrackerResult result;
 	result.found = found;
 	result.confidence = confidence;
 	if (found) {
@@ -157,6 +158,7 @@ static void setTrackerResult(TrackerResult& result, bool found, float confidence
 	} else {
 		result.pose = QMatrix4x4();
 	}
+	return result;
 }
 
 cv::Mat eulerAnglesToRotationMatrix(const QVector3D& rotation) {
@@ -521,7 +523,7 @@ bool VisionVideoFilterRunnable::trackRobot() {
 	auto& output(outputRobot.writeBuffer());
 	output.rotation = input.rotation;
 
-	setTrackerResult(output.result, detection.isFound(), 0, detection.getPose());
+	output.result = affineToTrackerResult(detection.isFound(), 0, detection.getPose());
 
 	return !outputRobot.writeSwap();
 }
@@ -541,8 +543,7 @@ bool VisionVideoFilterRunnable::trackLandmarks() {
 	output.results.reserve(detection.size());
 
 	for (auto it(detection.begin()); it != detection.end(); ++it) {
-		output.results.push_back({});
-		setTrackerResult(output.results.last(), it->isFound(), it->getConfidence(), it->getPose());
+		output.results.push_back(affineToTrackerResult(it->isFound(), it->getConfidence(), it->getPose()));
 	}
 
 	if (filter->calibrationRunning) {

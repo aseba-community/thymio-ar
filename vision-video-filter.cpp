@@ -495,19 +495,26 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 	}
 
 #ifdef THYMIO_AR_IMWRITE
-	static bool first = true;
-	if (first) {
-		qWarning()
-				<< input.image.data[0x00] << input.image.data[0x01] << input.image.data[0x02] << input.image.data[0x03]
-				<< input.image.data[0x04] << input.image.data[0x05] << input.image.data[0x06] << input.image.data[0x07]
-				<< input.image.data[0x08] << input.image.data[0x09] << input.image.data[0x0A] << input.image.data[0x0B]
-				<< input.image.data[0x0C] << input.image.data[0x0D] << input.image.data[0x0E] << input.image.data[0x0F]
-				<< input.image.data[0x10] << input.image.data[0x11] << input.image.data[0x12] << input.image.data[0x13]
-				<< input.image.data[0x14] << input.image.data[0x15] << input.image.data[0x16] << input.image.data[0x17]
-				<< input.image.data[0x18] << input.image.data[0x19] << input.image.data[0x1A] << input.image.data[0x1B]
-				<< input.image.data[0x1C] << input.image.data[0x1D] << input.image.data[0x1E] << input.image.data[0x1F];
-		cv::imwrite(QSysInfo::productType() == "android" ? "/storage/emulated/0/DCIM/100ANDRO/tracker.png" : "tracker.png", input.image);
-		first = false;
+	static std::vector<cv::Mat> images(100);
+	static size_t count(0);
+	if (count == 0) {
+		for (auto image : images) {
+			image.create(outputSize, outputType);
+		}
+	}
+	if (count < images.size()) {
+		input.image.copyTo(images[count]);
+		count += 1;
+	} else {
+		QString filename(QSysInfo::productType() == "android" ? "/storage/emulated/0/DCIM/100ANDRO/tracker/tracker%1.png" : "tracker%1.png");
+		int i = 0;
+		for (auto image : images) {
+			if (!cv::imwrite(filename.arg(i, 2, 10, QChar('0')).toStdString(), image)) {
+				qFatal("imwrite failed");
+			}
+			++i;
+		}
+		qFatal("done");
 	}
 #endif
 

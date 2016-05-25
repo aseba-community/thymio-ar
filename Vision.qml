@@ -8,6 +8,8 @@ Item {
 	property alias robot: filter.robot
 	property alias landmarks: filter.landmarks
 
+	property rect sourceInOutputRect
+
 	property alias calibrationRunning: filter.calibrationRunning
 	property alias calibrationProgress: filter.calibrationProgress
 	property alias calibrationDone: filter.calibrationDone
@@ -23,6 +25,8 @@ Item {
 			}
 		]
 		fillMode: QtMultimedia.VideoOutput.PreserveAspectCrop
+
+		onContentRectChanged: sourceInOutputRect = mapNormalizedRectToItem(Qt.rect(0,0,1,1));
 	}
 
 	Rectangle {

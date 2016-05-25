@@ -20,6 +20,12 @@ Item {
 		client.start(target);
 	}
 
+	// FIXME: this does not work if the connection is already active
+	onTargetChanged: {
+		console.log("connecting to new target", target);
+		startClient();
+	}
+
 	Component.onCompleted: {
 		client.userMessage.connect(userMessage);
 		startClient();

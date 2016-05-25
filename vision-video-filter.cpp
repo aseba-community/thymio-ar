@@ -366,7 +366,10 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 	auto size(inputFrame->size());
 	auto height(size.height());
 	auto width(size.width());
+
 	auto outputWidth(outputHeight * width / height);
+	auto outputSize(cv::Size(outputWidth, outputHeight));
+	auto outputType(CV_8UC1);
 
 	if (inputFrame->handleType() == QAbstractVideoBuffer::HandleType::GLTextureHandle) {
 
@@ -427,7 +430,7 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 		gl->glDisable(GL_BLEND);
 		gl->glDrawArrays(GL_TRIANGLES, 0, 3);
 
-		input.image.create(outputHeight, outputWidth, CV_8UC1);
+		input.image.create(outputSize, outputType);
 		gl->glPixelStorei(GL_PACK_ALIGNMENT, 1);
 		gl->glReadPixels(0, 0, outputWidth, outputHeight, QOpenGLTexture::Red, QOpenGLTexture::UInt8, input.image.data);
 
@@ -444,9 +447,6 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 
 		//qWarning() << inputType << bits << bytesPerLine;
 		auto inputMat(cv::Mat(height, width, inputType, bits, bytesPerLine));
-
-		const auto outputSize(cv::Size(outputWidth, outputHeight));
-		const auto outputType(CV_8UC1);
 
 		auto resize(inputMat.size() != outputSize);
 		auto convert(cvtCode != cv::COLOR_COLORCVT_MAX);

@@ -378,31 +378,47 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 			gl = context->extraFunctions();
 
 			auto version(context->isOpenGLES() ? "#version 300 es\n" : "#version 130\n");
+			auto uvOffset(-QVector2D(1, 1) / (2 * QVector2D(outputWidth, outputHeight)));
+
+			auto sampleByPixelF(float(height) / float(outputHeight));
+			unsigned int sampleByPixelI(std::ceil(sampleByPixelF));
+			auto uvDelta(QVector2D(1, 1) / QVector2D(width, height));
+			auto lumaScaled(QVector3D(0.299, 0.587, 0.114) / (sampleByPixelI * sampleByPixelI));
 
 			QString vertex(version);
 			vertex += R"(
-			    out vec2 coord;
+			    const vec2 uvOffset = vec2(%1, %2);
+			    out vec2 uvBase;
 			    void main(void) {
 			        int id = gl_VertexID;
-			        coord = vec2((id << 1) & 2, id & 2);
-			        gl_Position = vec4(coord * 2.0 - 1.0, 0.0, 1.0);
+			        lowp vec2 uvCenter = vec2((id << 1) & 2, id & 2);
+			        uvBase = uvCenter + uvOffset;
+			        gl_Position = vec4(uvCenter * 2.0 - 1.0, 0.0, 1.0);
 			    }
 			)";
 
 			QString fragment(version);
 			fragment += R"(
-			    in lowp vec2 coord;
+			    in lowp vec2 uvBase;
 			    uniform sampler2D image;
-			    const lowp vec3 luma = vec3(0.299, 0.587, 0.114);
+			    const uint sampleByPixel = %1u;
+			    const lowp vec2 uvDelta = vec2(%2, %3);
+			    const lowp vec3 lumaScaled = vec3(%4, %5, %6);
 			    out lowp float fragment;
 			    void main(void) {
-			           lowp vec3 color = texture(image, coord).bgr;
-			           fragment = dot(color, luma);
+			        lowp vec3 sum = vec3(0, 0, 0);
+			        for (uint x = 0u; x < sampleByPixel; ++x) {
+			            for (uint y = 0u; y < sampleByPixel; ++y) {
+			                lowp vec2 uv = uvBase + vec2(x, y) * uvDelta;
+			                sum += texture(image, uv).bgr;
+			            }
+			        }
+			        fragment = dot(sum, lumaScaled);
 			    }
 			)";
 
-			program.addShaderFromSourceCode(QOpenGLShader::Vertex, vertex);
-			program.addShaderFromSourceCode(QOpenGLShader::Fragment, fragment);
+			program.addShaderFromSourceCode(QOpenGLShader::Vertex, vertex.arg(uvOffset.x()).arg(uvOffset.y()));
+			program.addShaderFromSourceCode(QOpenGLShader::Fragment, fragment.arg(sampleByPixelI).arg(uvDelta.x()).arg(uvDelta.y()).arg(lumaScaled.x()).arg(lumaScaled.y()).arg(lumaScaled.z()));
 			program.link();
 			imageLocation = program.uniformLocation("image");
 
@@ -419,8 +435,9 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 
 		gl->glActiveTexture(GL_TEXTURE0);
 		gl->glBindTexture(QOpenGLTexture::Target2D, inputFrame->handle().toUInt());
-		gl->glGenerateMipmap(QOpenGLTexture::Target2D);
-		gl->glTexParameteri(QOpenGLTexture::Target2D, GL_TEXTURE_MIN_FILTER, QOpenGLTexture::LinearMipMapLinear);
+		gl->glTexParameteri(QOpenGLTexture::Target2D, QOpenGLTexture::DirectionS, QOpenGLTexture::ClampToEdge);
+		gl->glTexParameteri(QOpenGLTexture::Target2D, QOpenGLTexture::DirectionT, QOpenGLTexture::ClampToEdge);
+		gl->glTexParameteri(QOpenGLTexture::Target2D, GL_TEXTURE_MIN_FILTER, QOpenGLTexture::Nearest);
 
 		program.bind();
 		program.setUniformValue(imageLocation, 0);

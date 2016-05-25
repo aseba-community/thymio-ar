@@ -1,6 +1,7 @@
 #include "vision-video-filter.h"
 
 #include <atomic>
+#include <array>
 #include <functional>
 #include <QDebug>
 #include <QFile>
@@ -124,6 +125,8 @@ static int getCvType(QVideoFrame::PixelFormat pixelFormat) {
 		return CV_8UC3;
 	case QVideoFrame::Format_YUV420P:
 		return CV_8UC1;
+	case QVideoFrame::Format_NV12:
+		return CV_8UC1;
 	default:
 		qCritical() << pixelFormat;
 		qFatal("unknown pixel format");
@@ -137,6 +140,8 @@ static cv::ColorConversionCodes getCvtCode(QVideoFrame::PixelFormat pixelFormat)
 	case QVideoFrame::Format_YUV420P:
 		// no conversion: just take the Y
 		return cv::COLOR_COLORCVT_MAX;
+	case QVideoFrame::Format_NV12:
+		return cv::COLOR_YUV2GRAY_NV12;
 	default:
 		qCritical() << pixelFormat;
 		qFatal("unknown pixel format");

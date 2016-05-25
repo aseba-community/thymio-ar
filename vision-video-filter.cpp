@@ -378,7 +378,6 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 			gl = context->extraFunctions();
 
 			auto version(context->isOpenGLES() ? "#version 300 es\n" : "#version 130\n");
-			auto uvOffset(-QVector2D(1, 1) / (2 * QVector2D(outputWidth, outputHeight)));
 
 			auto sampleByPixelF(float(height) / float(outputHeight));
 			unsigned int sampleByPixelI(std::ceil(sampleByPixelF));
@@ -387,13 +386,11 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 
 			QString vertex(version);
 			vertex += R"(
-			    const vec2 uvOffset = vec2(%1, %2);
 			    out vec2 uvBase;
 			    void main(void) {
 			        int id = gl_VertexID;
-			        lowp vec2 uvCenter = vec2((id << 1) & 2, id & 2);
-			        uvBase = uvCenter + uvOffset;
-			        gl_Position = vec4(uvCenter * 2.0 - 1.0, 0.0, 1.0);
+			        uvBase = vec2((id << 1) & 2, id & 2);
+			        gl_Position = vec4(uvBase * 2.0 - 1.0, 0.0, 1.0);
 			    }
 			)";
 
@@ -417,7 +414,7 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 			    }
 			)";
 
-			program.addShaderFromSourceCode(QOpenGLShader::Vertex, vertex.arg(uvOffset.x()).arg(uvOffset.y()));
+			program.addShaderFromSourceCode(QOpenGLShader::Vertex, vertex);
 			program.addShaderFromSourceCode(QOpenGLShader::Fragment, fragment.arg(sampleByPixelI).arg(uvDelta.x()).arg(uvDelta.y()).arg(lumaScaled.x()).arg(lumaScaled.y()).arg(lumaScaled.z()));
 			program.link();
 			imageLocation = program.uniformLocation("image");

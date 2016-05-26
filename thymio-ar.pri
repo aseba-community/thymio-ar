@@ -17,7 +17,7 @@ android {
     OPENCV_LIBS = -L$$OPENCV_BIN/lib $$OPENCV_LIBS_MODULES
 }
 
-defined(THYMIO_AR_IMWRITE) {
+defined(THYMIO_AR_IMWRITE,var) {
     DEFINES += THYMIO_AR_IMWRITE
     android {
         OPENCV_LIBS += -lopencv_imgcodecs -lIlmImf -llibjpeg -llibwebp -llibtiff -llibpng -llibjasper

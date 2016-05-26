@@ -353,7 +353,8 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 	Q_UNUSED(surfaceFormat);
 	Q_UNUSED(flags);
 
-	auto& input(inputRobot.writeBuffer());
+	auto& robotWrite(inputRobot.writeBuffer());
+	auto& input(robotWrite);
 
 	auto inputReading(filter->sensor.reading());
 	if (inputReading != nullptr) {
@@ -518,7 +519,9 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 	}
 #endif
 
-	inputLandmarks.writeBuffer() = input;
+	auto& landmarksWrite(inputLandmarks.writeBuffer());
+	landmarksWrite.rotation = robotWrite.rotation;
+	robotWrite.image.copyTo(landmarksWrite.image);
 
 	if (!inputRobot.writeSwap()) {
 		runnableRobot.invoke();

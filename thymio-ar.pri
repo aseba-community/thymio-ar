@@ -27,8 +27,6 @@ defined(THYMIO_AR_IMWRITE,var) {
     }
 }
 
-!defined(EIGEN_INCLUDE,var):error(undefined EIGEN_INCLUDE variable)
-
 ASEBA_SOURCES = \
     $$PWD/dashel/dashel/dashel-common.cpp \
     $$PWD/aseba/common/utils/FormatableString.cpp \

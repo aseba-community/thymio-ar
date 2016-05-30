@@ -17,7 +17,7 @@ Scene3D {
 					components: [
 						CameraLens {
 							projectionType: CameraLens.PerspectiveProjection
-							fieldOfView: 45 // FIXME: should this come from calibration?
+							fieldOfView: 35 // FIXME: should this come from calibration?
 							nearPlane : 0.01
 							farPlane : 10.0
 							aspectRatio: scene3D.width / scene3D.height

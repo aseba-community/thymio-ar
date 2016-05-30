@@ -573,8 +573,27 @@ bool VisionVideoFilterRunnable::trackLandmarks() {
 
 	output.results.clear();
 	output.results.reserve(detection.size());
+#ifndef NDEBUG
+	auto landmarkIt(tracker.getLandmarks().begin());
+#endif
 	for (auto it(detection.begin()); it != detection.end(); ++it) {
 		output.results.push_back(affineToTrackerResult(it->isFound(), it->getConfidence(), it->getPose()));
+#ifndef NDEBUG
+		std::vector<cv::Point2f> corners;
+		cv::perspectiveTransform(landmarkIt->getCorners(), corners, it->getHomography());
+
+		auto size(cv::Point2f(input.image.size()));
+		QPolygonF quad;
+		for (auto& corner : corners) {
+			quad.push_back({corner.x / size.x, corner.y / size.y});
+		}
+
+		QTransform transform;
+		QTransform::squareToQuad(quad, transform);
+
+		output.results.last().homography = transform;
+		++landmarkIt;
+#endif
 	}
 
 	if (filter->calibrationRunning) {

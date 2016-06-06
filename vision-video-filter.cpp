@@ -358,7 +358,8 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 	Q_UNUSED(surfaceFormat);
 	Q_UNUSED(flags);
 
-	auto& input(inputRobot.writeBuffer());
+	auto& robotWrite(inputRobot.writeBuffer());
+	auto& input(robotWrite);
 
 	auto inputReading(filter->sensor.reading());
 	if (inputReading != nullptr) {
@@ -371,7 +372,10 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 	auto size(inputFrame->size());
 	auto height(size.height());
 	auto width(size.width());
+
 	auto outputWidth(outputHeight * width / height);
+	auto outputSize(cv::Size(outputWidth, outputHeight));
+	auto outputType(CV_8UC1);
 
 	if (inputFrame->handleType() == QAbstractVideoBuffer::HandleType::GLTextureHandle) {
 
@@ -381,30 +385,43 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 
 			auto version(context->isOpenGLES() ? "#version 300 es\n" : "#version 130\n");
 
+			auto sampleByPixelF(float(height) / float(outputHeight));
+			unsigned int sampleByPixelI(std::ceil(sampleByPixelF));
+			auto uvDelta(QVector2D(1, 1) / QVector2D(width, height));
+			auto lumaScaled(QVector3D(0.299, 0.587, 0.114) / (sampleByPixelI * sampleByPixelI));
+
 			QString vertex(version);
 			vertex += R"(
-			    out vec2 coord;
+			    out vec2 uvBase;
 			    void main(void) {
 			        int id = gl_VertexID;
-			        coord = vec2((id << 1) & 2, id & 2);
-			        gl_Position = vec4(coord * 2.0 - 1.0, 0.0, 1.0);
+			        uvBase = vec2((id << 1) & 2, id & 2);
+			        gl_Position = vec4(uvBase * 2.0 - 1.0, 0.0, 1.0);
 			    }
 			)";
 
 			QString fragment(version);
 			fragment += R"(
-			    in lowp vec2 coord;
+			    in lowp vec2 uvBase;
 			    uniform sampler2D image;
-			    const lowp vec3 luma = vec3(0.2126, 0.7152, 0.0722);
+			    const uint sampleByPixel = %1u;
+			    const lowp vec2 uvDelta = vec2(%2, %3);
+			    const lowp vec3 lumaScaled = vec3(%4, %5, %6);
 			    out lowp float fragment;
 			    void main(void) {
-			           lowp vec3 color = texture(image, coord).rgb;
-			           fragment = dot(color, luma);
+			        lowp vec3 sum = vec3(0, 0, 0);
+			        for (uint x = 0u; x < sampleByPixel; ++x) {
+			            for (uint y = 0u; y < sampleByPixel; ++y) {
+			                lowp vec2 uv = uvBase + vec2(x, y) * uvDelta;
+			                sum += texture(image, uv).bgr;
+			            }
+			        }
+			        fragment = dot(sum, lumaScaled);
 			    }
 			)";
 
 			program.addShaderFromSourceCode(QOpenGLShader::Vertex, vertex);
-			program.addShaderFromSourceCode(QOpenGLShader::Fragment, fragment);
+			program.addShaderFromSourceCode(QOpenGLShader::Fragment, fragment.arg(sampleByPixelI).arg(uvDelta.x()).arg(uvDelta.y()).arg(lumaScaled.x()).arg(lumaScaled.y()).arg(lumaScaled.z()));
 			program.link();
 			imageLocation = program.uniformLocation("image");
 
@@ -421,8 +438,9 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 
 		gl->glActiveTexture(GL_TEXTURE0);
 		gl->glBindTexture(QOpenGLTexture::Target2D, inputFrame->handle().toUInt());
-		gl->glGenerateMipmap(QOpenGLTexture::Target2D);
-		gl->glTexParameteri(QOpenGLTexture::Target2D, GL_TEXTURE_MIN_FILTER, QOpenGLTexture::LinearMipMapLinear);
+		gl->glTexParameteri(QOpenGLTexture::Target2D, QOpenGLTexture::DirectionS, QOpenGLTexture::ClampToEdge);
+		gl->glTexParameteri(QOpenGLTexture::Target2D, QOpenGLTexture::DirectionT, QOpenGLTexture::ClampToEdge);
+		gl->glTexParameteri(QOpenGLTexture::Target2D, GL_TEXTURE_MIN_FILTER, QOpenGLTexture::Nearest);
 
 		program.bind();
 		program.setUniformValue(imageLocation, 0);
@@ -432,7 +450,7 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 		gl->glDisable(GL_BLEND);
 		gl->glDrawArrays(GL_TRIANGLES, 0, 3);
 
-		input.image.create(outputHeight, outputWidth, CV_8UC1);
+		input.image.create(outputSize, outputType);
 		gl->glPixelStorei(GL_PACK_ALIGNMENT, 1);
 		gl->glReadPixels(0, 0, outputWidth, outputHeight, QOpenGLTexture::Red, QOpenGLTexture::UInt8, input.image.data);
 
@@ -449,9 +467,6 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 
 		//qWarning() << inputType << bits << bytesPerLine;
 		auto inputMat(cv::Mat(height, width, inputType, bits, bytesPerLine));
-
-		const auto outputSize(cv::Size(outputWidth, outputHeight));
-		const auto outputType(CV_8UC1);
 
 		auto resize(inputMat.size() != outputSize);
 		auto convert(cvtCode != cv::COLOR_COLORCVT_MAX);
@@ -486,23 +501,32 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 	}
 
 #ifdef THYMIO_AR_IMWRITE
-	static bool first = true;
-	if (first) {
-		qWarning()
-				<< input.image.data[0x00] << input.image.data[0x01] << input.image.data[0x02] << input.image.data[0x03]
-				<< input.image.data[0x04] << input.image.data[0x05] << input.image.data[0x06] << input.image.data[0x07]
-				<< input.image.data[0x08] << input.image.data[0x09] << input.image.data[0x0A] << input.image.data[0x0B]
-				<< input.image.data[0x0C] << input.image.data[0x0D] << input.image.data[0x0E] << input.image.data[0x0F]
-				<< input.image.data[0x10] << input.image.data[0x11] << input.image.data[0x12] << input.image.data[0x13]
-				<< input.image.data[0x14] << input.image.data[0x15] << input.image.data[0x16] << input.image.data[0x17]
-				<< input.image.data[0x18] << input.image.data[0x19] << input.image.data[0x1A] << input.image.data[0x1B]
-				<< input.image.data[0x1C] << input.image.data[0x1D] << input.image.data[0x1E] << input.image.data[0x1F];
-		cv::imwrite(QSysInfo::productType() == "android" ? "/storage/emulated/0/DCIM/100ANDRO/tracker.png" : "tracker.png", input.image);
-		first = false;
+	static std::vector<cv::Mat> images(100);
+	static size_t count(0);
+	if (count == 0) {
+		for (auto image : images) {
+			image.create(outputSize, outputType);
+		}
+	}
+	if (count < images.size()) {
+		input.image.copyTo(images[count]);
+		count += 1;
+	} else {
+		QString filename(QSysInfo::productType() == "android" ? "/storage/emulated/0/DCIM/100ANDRO/tracker/tracker%1.png" : "tracker%1.png");
+		int i = 0;
+		for (auto image : images) {
+			if (!cv::imwrite(filename.arg(i, 2, 10, QChar('0')).toStdString(), image)) {
+				qFatal("imwrite failed");
+			}
+			++i;
+		}
+		qFatal("done");
 	}
 #endif
 
-	inputLandmarks.writeBuffer() = input;
+	auto& landmarksWrite(inputLandmarks.writeBuffer());
+	landmarksWrite.rotation = robotWrite.rotation;
+	robotWrite.image.copyTo(landmarksWrite.image);
 
 	if (!inputRobot.writeSwap()) {
 		runnableRobot.invoke();
@@ -554,8 +578,27 @@ bool VisionVideoFilterRunnable::trackLandmarks() {
 
 	output.results.clear();
 	output.results.reserve(detection.size());
+#ifndef NDEBUG
+	auto landmarkIt(tracker.getLandmarks().begin());
+#endif
 	for (auto it(detection.begin()); it != detection.end(); ++it) {
 		output.results.push_back(affineToTrackerResult(it->isFound(), it->getConfidence(), it->getPose()));
+#ifndef NDEBUG
+		std::vector<cv::Point2f> corners;
+		cv::perspectiveTransform(landmarkIt->getCorners(), corners, it->getHomography());
+
+		auto size(cv::Point2f(input.image.size()));
+		QPolygonF quad;
+		for (auto& corner : corners) {
+			quad.push_back({corner.x / size.x, corner.y / size.y});
+		}
+
+		QTransform transform;
+		QTransform::squareToQuad(quad, transform);
+
+		output.results.last().homography = transform;
+		++landmarkIt;
+#endif
 	}
 
 	if (filter->calibrationRunning) {

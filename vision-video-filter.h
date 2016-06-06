@@ -10,6 +10,9 @@
 struct TrackerResult {
 	bool found;
 	float confidence;
+#ifndef NDEBUG
+	QMatrix4x4 homography;
+#endif
 	QMatrix4x4 pose;
 };
 
@@ -18,12 +21,18 @@ class Landmark : public QObject {
 	Q_PROPERTY(QString fileName MEMBER fileName)
 	Q_PROPERTY(const bool found READ found NOTIFY changed)
 	Q_PROPERTY(const float confidence READ confidence NOTIFY changed)
+#ifndef NDEBUG
+	Q_PROPERTY(const QMatrix4x4 homography READ homography NOTIFY changed)
+#endif
 	Q_PROPERTY(const QMatrix4x4 pose READ pose NOTIFY changed)
 public:
 	QString fileName;
 	TrackerResult result;
 	bool found() { return result.found; }
 	float confidence() { return result.confidence; }
+#ifndef NDEBUG
+	const QMatrix4x4& homography() { return result.homography; }
+#endif
 	const QMatrix4x4& pose() { return result.pose; }
 signals:
 	void changed();

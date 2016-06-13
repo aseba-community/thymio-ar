@@ -2,9 +2,10 @@
 #define ASEBA_CLIENT_H
 
 #include <QThread>
+#include <QTimer>
 #include "dashel/dashel.h"
 #include "aseba/common/msg/msg.h"
-#include "aseba/common/msg/descriptions-manager.h"
+#include "aseba/common/msg/NodesManager.h"
 
 class DashelHub: public QObject, public Dashel::Hub {
 	Q_OBJECT
@@ -17,11 +18,16 @@ signals:
 	void error(QString source, QString reason);
 };
 
-class AsebaDescriptionsManager: public QObject, public Aseba::DescriptionsManager {
+class AsebaDescriptionsManager: public QObject, public Aseba::NodesManager {
 	Q_OBJECT
 signals:
 	void nodeProtocolVersionMismatch(unsigned nodeId, const std::wstring &nodeName, uint16 protocolVersion) Q_DECL_OVERRIDE;
 	void nodeDescriptionReceived(unsigned nodeId) Q_DECL_OVERRIDE;
+	void nodeConnected(unsigned nodeId) Q_DECL_OVERRIDE;
+	void nodeDisconnected(unsigned nodeId) Q_DECL_OVERRIDE;
+	void sendMessage(const Aseba::Message& message) Q_DECL_OVERRIDE;
+public slots:
+	void pingNetwork() { Aseba::NodesManager::pingNetwork(); }
 };
 
 class AsebaNode;
@@ -31,8 +37,9 @@ class AsebaClient: public QObject {
 	Q_PROPERTY(const QList<QObject*> nodes MEMBER nodes NOTIFY nodesChanged)
 	QThread thread;
 	DashelHub hub;
-	Dashel::Stream* stream;
 	AsebaDescriptionsManager manager;
+	QTimer managerTimer;
+	Dashel::Stream* stream;
 	QList<QObject*> nodes;
 public:
 	AsebaClient();
@@ -55,6 +62,7 @@ class AsebaNode: public QObject {
 public:
 	explicit AsebaNode(AsebaClient* parent, unsigned nodeId, const Aseba::TargetDescription* description);
 	AsebaClient* parent() const { return static_cast<AsebaClient*>(QObject::parent()); }
+	unsigned id() const { return nodeId; }
 	QString name() { return QString::fromStdWString(description.name); }
 public slots:
 	void setVariable(QString name, QList<int> value);

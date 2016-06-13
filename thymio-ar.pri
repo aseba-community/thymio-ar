@@ -34,7 +34,7 @@ ASEBA_SOURCES = \
     $$PWD/aseba/common/utils/HexFile.cpp \
     $$PWD/aseba/common/utils/BootloaderInterface.cpp \
     $$PWD/aseba/common/msg/msg.cpp \
-    $$PWD/aseba/common/msg/descriptions-manager.cpp \
+    $$PWD/aseba/common/msg/NodesManager.cpp \
     $$PWD/aseba/compiler/compiler.cpp \
     $$PWD/aseba/compiler/errors.cpp \
     $$PWD/aseba/compiler/identifier-lookup.cpp \

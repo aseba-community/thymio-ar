@@ -39,7 +39,7 @@ public:
 	~AsebaClient();
 public slots:
 	void start(QString target = ASEBA_DEFAULT_TARGET);
-	void send(Aseba::Message*);
+	void send(const Aseba::Message& message);
 signals:
 	void userMessage(unsigned type, QList<int> data);
 	void nodesChanged();

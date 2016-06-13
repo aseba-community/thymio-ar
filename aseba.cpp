@@ -56,11 +56,11 @@ AsebaClient::AsebaClient() {
 		this->stream = stream;
 		{
 			Aseba::GetDescription message;
-			send(&message);
+			send(message);
 		}
 		{
 			Aseba::ListNodes message;
-			send(&message);
+			send(message);
 		}
 	}, Qt::DirectConnection);
 
@@ -82,7 +82,7 @@ AsebaClient::AsebaClient() {
 		case ASEBA_MESSAGE_NODE_PRESENT:
 			if (manager.getDescription(message->source) == nullptr) {
 				Aseba::GetNodeDescription response(message->source);
-				send(&response);
+				send(response);
 			}
 			break;
 		case ASEBA_MESSAGE_DESCRIPTION:
@@ -131,9 +131,9 @@ void AsebaClient::start(QString target) {
 	QMetaObject::invokeMethod(&hub, "start", Qt::QueuedConnection, Q_ARG(QString, target));
 }
 
-void AsebaClient::send(Aseba::Message* message) {
+void AsebaClient::send(const Aseba::Message& message) {
 	if (stream) {
-		message->serialize(stream);
+		message.serialize(stream);
 		stream->flush();
 	}
 }
@@ -148,7 +148,7 @@ void AsebaNode::setVariable(QString name, QList<int> value) {
 	uint16 start = variablesMap[name.toStdWString()].first;
 	Aseba::SetVariables::VariablesVector variablesVector(value.begin(), value.end());
 	Aseba::SetVariables message(nodeId, start, variablesVector);
-	parent()->send(&message);
+	parent()->send(message);
 }
 
 void AsebaNode::setProgram(QString source) {
@@ -174,10 +174,10 @@ void AsebaNode::setProgram(QString source) {
 	std::vector<Aseba::Message*> messages;
 	Aseba::sendBytecode(messages, nodeId, std::vector<uint16>(bytecode.begin(), bytecode.end()));
 	foreach (auto message, messages) {
-		parent()->send(message);
+		parent()->send(*message);
 		delete message;
 	}
 
 	Aseba::Run run(nodeId);
-	parent()->send(&run);
+	parent()->send(run);
 }

@@ -152,8 +152,7 @@ void AsebaNode::setProgram(QString source) {
 	Aseba::Compiler compiler;
 	compiler.setTargetDescription(&description);
 	Aseba::CommonDefinitions commonDefinitions;
-	commonDefinitions.events.push_back(Aseba::NamedValue(L"block", 2));
-	commonDefinitions.events.push_back(Aseba::NamedValue(L"link", 2));
+	commonDefinitions.events.push_back(Aseba::NamedValue(L"transition", 2));
 	compiler.setCommonDefinitions(&commonDefinitions);
 
 	std::wistringstream input(source.toStdWString());

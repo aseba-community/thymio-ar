@@ -6,6 +6,7 @@ import Qt3D.Extras 2.0
 
 Item {
 	default property alias data: frameGraph.data
+	property matrix4x4 lens
 	property matrix4x4 camera
 	Scene3D {
 		x: cameraRect.x
@@ -22,11 +23,7 @@ Item {
 					camera: Entity {
 						components: [
 							CameraLens {
-								projectionType: CameraLens.PerspectiveProjection
-								fieldOfView: 35 // FIXME: should this come from calibration?
-								nearPlane : 0.01
-								farPlane : 10.0
-								aspectRatio: cameraRect.width / cameraRect.height
+								projectionMatrix: lens
 							},
 							Transform {
 								matrix: camera

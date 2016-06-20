@@ -44,6 +44,7 @@ class VisionVideoFilter : public QAbstractVideoFilter {
 	Q_PROPERTY(Landmark* robot READ getRobot)
 	Q_PROPERTY(QQmlListProperty<Landmark> landmarks READ getLandmarks)
 
+	Q_PROPERTY(const QMatrix4x4 lens MEMBER lens NOTIFY updatedCalibration)
 	Q_PROPERTY(bool calibrationRunning MEMBER calibrationRunning NOTIFY updatedCalibration)
 	Q_PROPERTY(const float calibrationProgress MEMBER calibrationProgress NOTIFY updatedCalibration)
 	Q_PROPERTY(const bool calibrationDone MEMBER calibrationDone NOTIFY updatedCalibration)
@@ -59,6 +60,7 @@ public:
 	Landmark* getRobot() { return &robot; }
 	QQmlListProperty<Landmark> getLandmarks() { return QQmlListProperty<Landmark>(this, landmarks); }
 
+	QMatrix4x4 lens;
 	bool calibrationRunning = false;
 	float calibrationProgress = 0.0;
 	bool calibrationDone = false;

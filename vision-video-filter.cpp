@@ -301,6 +301,7 @@ private:
 	void trackedRobot();
 	void trackedLandmarks();
 	void updateCalibration(const cv::Mat &input);
+	void updateLens();
 	void updateCalibrationExpect();
 
 	size_t calibrationState;
@@ -322,6 +323,7 @@ VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::F
 		, runnableLandmarks(threadLandmarks, std::bind(&VisionVideoFilterRunnable::trackLandmarks, this))
 		, calibrationState(0)
 		, gl(nullptr) {
+	updateLens();
 	updateCalibrationExpect();
 
 	QObject::connect(&runnableRobot, &Runnable::ran, filter, [this]() {
@@ -693,6 +695,8 @@ void VisionVideoFilterRunnable::updateCalibration(const cv::Mat& input) {
 		filter->calibrationProgress = 1.0;
 		filter->calibrationDone = true;
 
+		updateLens();
+
 		cv::FileStorage storage("calibration.xml", cv::FileStorage::WRITE | cv::FileStorage::MEMORY);
 		tracker.writeCalibration(storage);
 		auto calibration(QString::fromStdString(storage.releaseAndGetString()));
@@ -702,6 +706,48 @@ void VisionVideoFilterRunnable::updateCalibration(const cv::Mat& input) {
 	}
 
 	updateCalibrationExpect();
+}
+
+void VisionVideoFilterRunnable::updateLens() {
+	auto& calibration(tracker.getCalibration());
+
+	float near = 0.1;
+	float far = 10.0;
+
+	filter->lens.setToIdentity();
+
+	{
+		// orthogonal projection to normalized device coordinates
+		auto& size(calibration.imageSize);
+		QVector3D low(0, 0, near);
+		QVector3D high(size.width, size.height, far);
+		auto sum(high + low);
+		auto diff(high - low);
+		auto t(-sum/diff);
+		filter->lens *= QMatrix4x4(
+		    2/diff.x(), 0, 0, t.x(),
+		    0, 2/diff.y(), 0, t.y(),
+		    0, 0, -2/diff.z(), t.z(),
+		    0, 0, 0, 1
+		);
+	}
+
+	{
+		// perspective projection
+		auto& matrix(calibration.cameraMatrix);
+		float alpha = matrix.at<double>(0, 0);
+		float beta = matrix.at<double>(1, 1);
+		float skew = matrix.at<double>(0, 1);
+		float x0 = matrix.at<double>(0, 2);
+		float y0 = matrix.at<double>(1, 2);
+		filter->lens *= QMatrix4x4(
+		    alpha, skew, -x0, 0,
+		    0, beta, -y0, 0,
+		    0, 0, near+far, near*far,
+		    0, 0, -1, 0
+		);
+		qDebug() << "camera lens:" << alpha << beta << skew << x0 << y0 << filter->lens;
+	}
 }
 
 void VisionVideoFilterRunnable::updateCalibrationExpect() {

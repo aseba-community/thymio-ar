@@ -578,12 +578,12 @@ bool VisionVideoFilterRunnable::trackLandmarks() {
 
 	output.results.clear();
 	output.results.reserve(detection.size());
-#ifndef NDEBUG
+#ifdef THYMIO_AR_HOMOGRAPHY
 	auto landmarkIt(tracker.getLandmarks().begin());
 #endif
 	for (auto it(detection.begin()); it != detection.end(); ++it) {
 		output.results.push_back(affineToTrackerResult(it->isFound(), it->getConfidence(), it->getPose()));
-#ifndef NDEBUG
+#ifdef THYMIO_AR_HOMOGRAPHY
 		std::vector<cv::Point2f> corners;
 		cv::perspectiveTransform(landmarkIt->getCorners(), corners, it->getHomography());
 

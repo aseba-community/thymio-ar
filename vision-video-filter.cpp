@@ -193,56 +193,23 @@ void rotateResult(TrackerResult& result, const QQuaternion& quaternion) {
 
 
 
-struct CalibrationPose {
-	cv::Point2f center;
-	std::vector<float> angles;
-	std::vector<float> lengths;
-	CalibrationPose(const std::vector<cv::Point2f>& points) {
-		auto prev(points.back());
-		for (auto it(points.begin()); it != points.end(); ++it) {
-			auto& point(*it);
-			center += point;
-
-			auto diff(point - prev);
-			angles.push_back(std::atan2(diff.y, diff.x));
-			lengths.push_back(diff.dot(diff));
-			prev = point;
-		}
-		center /= float(points.size());
-		std::sort(angles.begin(), angles.end());
-		std::sort(lengths.begin(), lengths.end());
-	}
-	bool operator==(const CalibrationPose& that) {
-		auto center(cv::norm(this->center - that.center));
-		if (center > 0.2) {
-			return false;
-		}
-
-		auto angles(cv::norm(this->angles, that.angles));
-		if (angles > 0.2) {
-			return false;
-		}
-
-		auto lengths(cv::norm(this->lengths, that.lengths));
-		if (lengths > 0.2) {
-			return false;
-		}
-
-		return true;
-	}
-	bool operator!=(const CalibrationPose& that) {
-		return !(*this == that);
-	}
-};
-
 struct CalibrationExpect {
 	bool right;
 	QMatrix4x4 transform;
-	CalibrationPose pose;
+	std::vector<cv::Point2f> vertices;
 	CalibrationExpect(bool right, QPointF a, QPointF b, QPointF c, QPointF d)
 	    : right(right)
 	    , transform(squareToQuad(QVector<QPointF> {a, b, c, d}))
-	    , pose(std::vector<cv::Point2f> { p(a), p(b), p(c), p(d) }) {
+	    , vertices({ p(a), p(b), p(c), p(d) }) {
+	}
+	bool isSame(std::vector<cv::Point2f>& vertices) const {
+		auto min = std::numeric_limits<double>::infinity();
+		for (auto i = 0u; i < vertices.size(); ++i) {
+			auto norm(cv::norm(this->vertices, vertices));
+			min = std::min(min, norm);
+			std::rotate(vertices.begin(), vertices.begin() + 1, vertices.end());
+		}
+		return min < 0.15;
 	}
 private:
 	static QTransform squareToQuad(QPolygonF quad) {
@@ -258,12 +225,18 @@ private:
 };
 
 static const std::vector<CalibrationExpect> calibrationExpects {
-	{false, {0.8, 0.8}, {0.2, 0.8}, {0.2, 0.2}, {0.8, 0.2}},
-	{true, {0.8, 0.8}, {0.2, 0.8}, {0.2, 0.2}, {0.8, 0.2}},
-	{false, {0.8, 0.9}, {0.2, 0.8}, {0.2, 0.2}, {0.8, 0.1}},
-	{true, {0.8, 0.9}, {0.2, 0.8}, {0.2, 0.2}, {0.8, 0.1}},
-	{false, {0.9, 0.8}, {0.1, 0.8}, {0.2, 0.2}, {0.8, 0.2}},
-	{true, {0.9, 0.8}, {0.1, 0.8}, {0.2, 0.2}, {0.8, 0.2}},
+	{false, {0.6, 0.1}, {0.6, 0.6}, {0.1, 0.6}, {0.1, 0.1}},
+	{false, {0.6, 0.4}, {0.6, 0.9}, {0.1, 0.9}, {0.1, 0.4}},
+	{true, {0.9, 0.4}, {0.9, 0.9}, {0.4, 0.9}, {0.4, 0.4}},
+	{true, {0.9, 0.1}, {0.9, 0.6}, {0.4, 0.6}, {0.4, 0.1}},
+	{true, {0.85, 0.7}, {0.9, 0.9}, {0.4, 0.9}, {0.45, 0.7}},
+	{true, {0.85, 0.1}, {0.9, 0.3}, {0.4, 0.3}, {0.45, 0.1}},
+	{false, {0.55, 0.1}, {0.6, 0.3}, {0.1, 0.3}, {0.15, 0.1}},
+	{false, {0.55, 0.7}, {0.6, 0.9}, {0.1, 0.9}, {0.15, 0.7}},
+	{false, {0.3, 0.15}, {0.3, 0.55}, {0.1, 0.6}, {0.1, 0.1}},
+	{false, {0.3, 0.45}, {0.3, 0.85}, {0.1, 0.9}, {0.1, 0.4}},
+	{true, {0.9, 0.45}, {0.9, 0.85}, {0.7, 0.9}, {0.7, 0.4}},
+	{true, {0.9, 0.15}, {0.9, 0.55}, {0.7, 0.6}, {0.7, 0.1}},
 };
 
 
@@ -675,19 +648,19 @@ void VisionVideoFilterRunnable::updateCalibration(const cv::Mat& input) {
 	}
 
 	const auto& landmark(tracker.getLandmarks().front());
-
-	std::vector<cv::Point2f> landmarkCorners;
-	cv::perspectiveTransform(landmark.getCorners(), landmarkCorners, detection.getHomography());
-	CalibrationPose landmarkPose(landmarkCorners);
-
+	const auto& calibrationExpect(calibrationExpects[calibrationState]);
 	auto size(input.size());
-	if (filter->calibrationRight) {
-		landmarkPose.center.x += size.height - size.width;
-	}
-	landmarkPose.center /= float(size.height);
 
-	const auto& calibrationPose(calibrationExpects[calibrationState].pose);
-	if (landmarkPose != calibrationPose) {
+	std::vector<cv::Point2f> vertices;
+	cv::perspectiveTransform(landmark.getCorners(), vertices, detection.getHomography());
+	for (auto& vertex : vertices) {
+		if (calibrationExpect.right) {
+			vertex.x += size.height - size.width;
+		}
+		vertex /= size.height;
+	}
+
+	if (!calibrationExpect.isSame(vertices)) {
 		// wrong pose
 		return;
 	}

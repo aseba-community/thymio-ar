@@ -196,6 +196,7 @@ void rotateResult(TrackerResult& result, const QQuaternion& quaternion) {
 struct CalibrationPose {
 	cv::Point2f center;
 	std::vector<float> angles;
+	std::vector<float> lengths;
 	CalibrationPose(const std::vector<cv::Point2f>& points) {
 		auto prev(points.back());
 		for (auto it(points.begin()); it != points.end(); ++it) {
@@ -204,10 +205,12 @@ struct CalibrationPose {
 
 			auto diff(point - prev);
 			angles.push_back(std::atan2(diff.y, diff.x));
+			lengths.push_back(diff.dot(diff));
 			prev = point;
 		}
 		center /= float(points.size());
 		std::sort(angles.begin(), angles.end());
+		std::sort(lengths.begin(), lengths.end());
 	}
 	bool operator==(const CalibrationPose& that) {
 		auto center(cv::norm(this->center - that.center));
@@ -217,6 +220,11 @@ struct CalibrationPose {
 
 		auto angles(cv::norm(this->angles, that.angles));
 		if (angles > 0.2) {
+			return false;
+		}
+
+		auto lengths(cv::norm(this->lengths, that.lengths));
+		if (lengths > 0.2) {
 			return false;
 		}
 

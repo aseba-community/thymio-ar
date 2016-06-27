@@ -23,12 +23,7 @@ Item {
 					camera: Entity {
 						components: [
 							CameraLens {
-								//projectionMatrix: lens
-								projectionType: CameraLens.PerspectiveProjection
-								fieldOfView: 42
-								nearPlane : 0.01
-								farPlane : 10.0
-								aspectRatio: cameraRect.width / cameraRect.height
+								projectionMatrix: lens
 							},
 							Transform {
 								matrix: camera

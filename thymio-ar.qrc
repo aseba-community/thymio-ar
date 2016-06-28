@@ -6,5 +6,7 @@
         <file alias="robotModel.xml">thymio-tracker/data/modelSurfaces.xml</file>
         <file>Scene3d.qml</file>
         <file>Landmark.qml</file>
+        <file>shaders/settransparent.frag</file>
+        <file>shaders/settransparent.vert</file>
     </qresource>
 </RCC>

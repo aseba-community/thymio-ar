@@ -6,6 +6,7 @@ import Qt3D.Extras 2.0
 
 Item {
 	default property alias data: frameGraph.data
+	property matrix4x4 robotPose
 	property matrix4x4 lens
 	property matrix4x4 camera
 	Scene3D {
@@ -31,6 +32,38 @@ Item {
 						]
 					}
 				}
+			}
+
+			// draw a transparent robot at the pose of the actual robot
+			Entity {
+				components: [
+					CuboidMesh { xExtent: 0.11; yExtent: 0.11; zExtent: 0.06 },
+					Material {
+						effect: Effect {
+							techniques: [
+								Technique {
+									// our shaders are valid both for OpenGL 2.0 and OpenGL ES 2.0
+//									graphicsApiFilter {
+//										api: GraphicsApiFilter.OpenGL
+//										profile: GraphicsApiFilter.NoProfile
+//										majorVersion: 2
+//										minorVersion: 0
+//									}
+									filterKeys: FilterKey {	name: "renderingStyle"; value: "forward" }
+									renderPasses: RenderPass {
+										shaderProgram: ShaderProgram {
+											vertexShaderCode: loadSource("qrc:/thymio-ar/shaders/settransparent.vert")
+											fragmentShaderCode: loadSource("qrc:/thymio-ar/shaders/settransparent.frag")
+										}
+									}
+								}
+							]
+						}
+					},
+					Transform {
+						matrix: robotPose
+					}
+				]
 			}
 		}
 	}

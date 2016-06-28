@@ -37,7 +37,12 @@ Item {
 			// draw a transparent robot at the pose of the actual robot
 			Entity {
 				components: [
-					CuboidMesh { xExtent: 0.11; yExtent: 0.11; zExtent: 0.06 },
+					Mesh {
+						meshName: "alphaThymio"
+						source: "qrc:/thymio-ar/assets/thymio-body-simplified.obj"
+					},
+					//CuboidMesh { xExtent: 0.11; yExtent: 0.11; zExtent: 0.06 },
+					//CuboidMesh { xExtent: 0.02; yExtent: 0.02; zExtent: 0.10 },
 					Material {
 						effect: Effect {
 							techniques: [

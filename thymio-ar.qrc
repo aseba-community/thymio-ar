@@ -8,5 +8,6 @@
         <file>Landmark.qml</file>
         <file>shaders/settransparent.frag</file>
         <file>shaders/settransparent.vert</file>
+        <file>assets/thymio-body-simplified.obj</file>
     </qresource>
 </RCC>

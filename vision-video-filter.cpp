@@ -333,6 +333,12 @@ VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::F
 VisionVideoFilterRunnable::~VisionVideoFilterRunnable() {
 	threadRobot.quit();
 	threadLandmarks.quit();
+
+	if (gl != nullptr) {
+		gl->glDeleteFramebuffers(1, &framebuffer);
+		gl->glDeleteRenderbuffers(1, &renderbuffer);
+	}
+
 	threadRobot.wait();
 	threadLandmarks.wait();
 }

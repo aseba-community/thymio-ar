@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <array>
+#include <chrono>
 #include <functional>
 #include <QDebug>
 #include <QFile>
@@ -167,12 +168,12 @@ static TrackerResult affineToTrackerResult(bool found, float confidence, const c
 }
 
 bool isRotationValid(const QVector3D& rotation) {
+	// nan nan nan, Batman!
 	return !std::isnan(rotation[0]) && !std::isnan(rotation[1]) && !std::isnan(rotation[2]);
 }
 
 cv::Mat eulerAnglesToRotationMatrix(const QVector3D& rotation) {
 	if (!isRotationValid(rotation)) {
-		// nan nan nan, Batman!
 		return cv::Mat();
 	}
 	auto matrix(QQuaternion::fromEulerAngles(rotation).toRotationMatrix());
@@ -242,17 +243,22 @@ static const std::vector<CalibrationExpect> calibrationExpects {
 
 
 
+typedef std::chrono::steady_clock::time_point Instant;
+
 struct Input {
+	Instant instant;
 	QVector3D rotation;
 	cv::Mat image;
 };
 
 struct OutputRobot {
+	Instant instant = std::chrono::steady_clock::time_point::min();
 	QVector3D rotation = QVector3D(NaN, NaN, NaN);
 	TrackerResult result;
 };
 
 struct OutputLandmarks {
+	Instant instant = std::chrono::steady_clock::time_point::min();
 	QVector3D rotation = QVector3D(NaN, NaN, NaN);
 	QList<TrackerResult> results;
 };
@@ -279,11 +285,20 @@ private:
 	TripleBuffer<OutputLandmarks> outputLandmarks;
 	bool trackRobot();
 	bool trackLandmarks();
-	void trackedRobot();
-	void trackedLandmarks();
+	void trackedRobot(const OutputRobot& output);
+	void trackedLandmarks(const OutputLandmarks& output);
 	void updateCalibration(const cv::Mat &input);
 	void updateLens();
 	void updateCalibrationExpect();
+
+	struct LandmarkResult {
+		QVector3D rotation;
+		TrackerResult result;
+	};
+	typedef std::map<Instant, LandmarkResult> LandmarkResults;
+	OutputRobot lastRobot;
+	LandmarkResults lastLandmarks;
+	std::pair<LandmarkResults::iterator, bool> updateRobotUsingLandmarks(const OutputLandmarks& landmarks);
 
 	size_t calibrationState;
 
@@ -309,20 +324,38 @@ VisionVideoFilterRunnable::VisionVideoFilterRunnable(VisionVideoFilter* f, cv::F
 
 	QObject::connect(&runnableRobot, &Runnable::ran, filter, [this]() {
 		outputRobot.readSwap();
-		trackedRobot();
+		auto& output(outputRobot.readBuffer());
+		lastRobot = output;
+		auto upperBound(updateRobotUsingLandmarks(outputLandmarks.readBuffer()).first);
+		lastLandmarks.erase(lastLandmarks.begin(), upperBound);
+		trackedRobot(lastRobot);
 	}, Qt::QueuedConnection);
 
 	QObject::connect(&runnableLandmarks, &Runnable::ran, filter, [this]() {
 		outputLandmarks.readSwap();
-		trackedLandmarks();
+		auto& output(outputLandmarks.readBuffer());
+		if (!output.results.empty()) {
+			auto& result0(output.results.front());
+			if (result0.found) {
+				lastLandmarks.insert({output.instant, {output.rotation, result0}});
+				auto& outputRobot(this->outputRobot.readBuffer());
+				lastRobot = outputRobot;
+				if (updateRobotUsingLandmarks(output).second) {
+					trackedRobot(lastRobot);
+				}
+			}
+		}
+		trackedLandmarks(output);
 	}, Qt::QueuedConnection);
 
 	QObject::connect(&filter->sensor, &QSensor::readingChanged, filter, [this]() {
-		if (isRotationValid(outputRobot.readBuffer().rotation)) {
-			trackedRobot();
+		auto& outputRobot(this->outputRobot.readBuffer());
+		if (isRotationValid(outputRobot.rotation)) {
+			trackedRobot(outputRobot);
 		}
-		if (isRotationValid(outputLandmarks.readBuffer().rotation)) {
-			trackedLandmarks();
+		auto& outputLandmarks(this->outputLandmarks.readBuffer());
+		if (isRotationValid(outputLandmarks.rotation)) {
+			trackedLandmarks(outputLandmarks);
 		}
 	});
 
@@ -349,6 +382,8 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 
 	auto& robotWrite(inputRobot.writeBuffer());
 	auto& input(robotWrite);
+
+	input.instant = std::chrono::steady_clock::now();
 
 	auto inputReading(filter->sensor.reading());
 	if (inputReading != nullptr) {
@@ -514,6 +549,7 @@ QVideoFrame VisionVideoFilterRunnable::run(QVideoFrame* inputFrame, const QVideo
 #endif
 
 	auto& landmarksWrite(inputLandmarks.writeBuffer());
+	landmarksWrite.instant = robotWrite.instant;
 	landmarksWrite.rotation = robotWrite.rotation;
 	robotWrite.image.copyTo(landmarksWrite.image);
 
@@ -597,9 +633,35 @@ bool VisionVideoFilterRunnable::trackLandmarks() {
 	return !outputLandmarks.writeSwap();
 }
 
-void VisionVideoFilterRunnable::trackedRobot() {
-	const auto& output(outputRobot.readBuffer());
+std::pair<VisionVideoFilterRunnable::LandmarkResults::iterator, bool> VisionVideoFilterRunnable::updateRobotUsingLandmarks(const OutputLandmarks& landmarks) {
+	if (lastRobot.instant == std::chrono::steady_clock::time_point::min() || landmarks.instant == std::chrono::steady_clock::time_point::min()) {
+		// no tracking done yet
+		return std::make_pair(lastLandmarks.begin(), false);
+	}
 
+	auto landmarkOld(lastLandmarks.lower_bound(lastRobot.instant));
+	if (landmarkOld == lastLandmarks.end() || landmarkOld->first == landmarks.instant) {
+		// latest landmark not newer than latest robot
+		return std::make_pair(landmarkOld, false);
+	}
+
+	auto& landmark(landmarks.results.front());
+	if (!lastRobot.result.found || !landmark.found) {
+		// robot or landmark not visible
+		return std::make_pair(landmarkOld, false);
+	}
+
+	// TODO: interpolate landmarkOld if robot.instant != landmarkOld->first
+
+	lastRobot.instant = landmarks.instant;
+	lastRobot.rotation = landmarks.rotation;
+	lastRobot.result.confidence = landmark.confidence * landmarkOld->second.result.confidence * lastRobot.result.confidence;
+	// matrix black magic
+	lastRobot.result.pose = landmark.pose * landmarkOld->second.result.pose.inverted() * lastRobot.result.pose;
+	return std::make_pair(landmarkOld, true);
+}
+
+void VisionVideoFilterRunnable::trackedRobot(const OutputRobot& output) {
 	filter->robot.result = output.result;
 
 	auto reading(filter->sensor.reading());
@@ -614,9 +676,7 @@ void VisionVideoFilterRunnable::trackedRobot() {
 	emit filter->robot.changed();
 }
 
-void VisionVideoFilterRunnable::trackedLandmarks() {
-	const auto& output(outputLandmarks.readBuffer());
-
+void VisionVideoFilterRunnable::trackedLandmarks(const OutputLandmarks& output) {
 	auto resultsIt(output.results.begin());
 	for (auto landmark : filter->landmarks) {
 		assert(resultsIt != output.results.end());
@@ -775,6 +835,7 @@ QVideoFilterRunnable* VisionVideoFilter::createFilterRunnable() {
 	cv::FileStorage geomHashing(readFile(":/thymio-ar/geomHashing.xml"), cv::FileStorage::READ | cv::FileStorage::MEMORY);
 	cv::FileStorage robotModel(readFile(":/thymio-ar/robotModel.xml"), cv::FileStorage::READ | cv::FileStorage::MEMORY);
 	std::vector<cv::FileStorage> landmarks;
+	landmarks.reserve(this->landmarks.size());
 	for (auto landmark : this->landmarks) {
 		landmarks.push_back(cv::FileStorage(readFile(landmark->fileName), cv::FileStorage::READ | cv::FileStorage::MEMORY));
 	}

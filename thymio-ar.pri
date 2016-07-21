@@ -4,6 +4,17 @@ android {
     OPENCV_INCLUDE = $$OPENCV_SDK/sdk/native/jni/include
     OPENCV_LIBS = -L$$OPENCV_SDK/sdk/native/3rdparty/libs/armeabi-v7a -L$$OPENCV_SDK/sdk/native/libs/armeabi-v7a \
         -Wl,--start-group $$OPENCV_LIBS_MODULES -ltbb -Wl,--end-group
+} ios {
+    !defined(OPENCV_SRC,var):warning(undefined OPENCV_SRC variable)
+    !defined(OPENCV_BIN,var):warning(undefined OPENCV_BIN variable)
+    OPENCV_INCLUDE = \
+        $$OPENCV_SRC/modules/calib3d/include \
+        $$OPENCV_SRC/modules/core/include \
+        $$OPENCV_SRC/modules/features2d/include \
+        $$OPENCV_SRC/modules/flann/include \
+        $$OPENCV_SRC/modules/imgproc/include \
+        $$OPENCV_SRC/modules/video/include
+    QMAKE_LFLAGS += -F$$OPENCV_BIN
 } else {
     !defined(OPENCV_SRC,var):warning(undefined OPENCV_SRC variable)
     !defined(OPENCV_BIN,var):warning(undefined OPENCV_BIN variable)

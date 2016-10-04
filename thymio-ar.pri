@@ -4,7 +4,7 @@ android {
     OPENCV_INCLUDE = $$OPENCV_SDK/sdk/native/jni/include
     OPENCV_LIBS = -L$$OPENCV_SDK/sdk/native/3rdparty/libs/armeabi-v7a -L$$OPENCV_SDK/sdk/native/libs/armeabi-v7a \
         -Wl,--start-group $$OPENCV_LIBS_MODULES -ltbb -Wl,--end-group
-} ios {
+} else: ios {
     !defined(OPENCV_SRC,var):warning(undefined OPENCV_SRC variable)
     !defined(OPENCV_BIN,var):warning(undefined OPENCV_BIN variable)
     OPENCV_INCLUDE = \

@@ -53,7 +53,7 @@ public:
 private:
 	typedef std::array<T, 3> buffers_t;
 	typedef std::uint_fast8_t index_t;
-	struct next_t {
+	struct alignas(2) next_t {
 		std::uint_fast8_t buffer;
 		bool valid;
 	};

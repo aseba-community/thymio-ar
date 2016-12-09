@@ -1,4 +1,13 @@
-OPENCV_LIBS_MODULES = -lopencv_calib3d -lopencv_core -lopencv_features2d -lopencv_flann -lopencv_imgproc -lopencv_video
+opencvworld {
+	build_pass:CONFIG(debug, debug|release) {
+		OPENCV_LIBS_MODULES = -lopencv_world310d
+	}
+	build_pass:CONFIG(release, debug|release) {
+		OPENCV_LIBS_MODULES = -lopencv_world310
+	}
+} else {
+	OPENCV_LIBS_MODULES = -lopencv_calib3d -lopencv_core -lopencv_features2d -lopencv_flann -lopencv_imgproc -lopencv_video
+}
 android {
     !defined(OPENCV_SDK,var):error(undefined OPENCV_SDK variable)
     OPENCV_INCLUDE = $$OPENCV_SDK/sdk/native/jni/include
@@ -34,7 +43,9 @@ defined(THYMIO_AR_IMWRITE,var) {
         OPENCV_LIBS += -lopencv_imgcodecs -lIlmImf -llibjpeg -llibwebp -llibtiff -llibpng -llibjasper
     } else {
         OPENCV_INCLUDE += $$OPENCV_SRC/modules/videoio/include $$OPENCV_SRC/modules/imgcodecs/include
-        OPENCV_LIBS += -lopencv_videoio -lopencv_imgcodecs
+		!opencvworld {
+			OPENCV_LIBS += -lopencv_videoio -lopencv_imgcodecs
+		}
     }
 }
 

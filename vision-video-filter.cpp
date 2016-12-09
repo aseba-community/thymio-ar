@@ -19,8 +19,8 @@
 
 #include "thymio-tracker/src/ThymioTracker.h"
 
-
-
+#undef far
+#undef near
 
 const auto outputHeight(480);
 const auto NaN(std::numeric_limits<double>::quiet_NaN());
@@ -137,6 +137,8 @@ static cv::ColorConversionCodes getCvtCode(QVideoFrame::PixelFormat pixelFormat)
 	switch (pixelFormat) {
 	case QVideoFrame::Format_BGR32:
 		return cv::COLOR_BGR2GRAY;
+	case QVideoFrame::Format_RGB32:
+		return cv::COLOR_RGB2GRAY;
 	case QVideoFrame::Format_YUV420P:
 		// no conversion: just take the Y
 		return cv::COLOR_COLORCVT_MAX;

@@ -53,12 +53,12 @@ public:
 private:
 	typedef std::array<T, 3> buffers_t;
 	typedef std::uint_fast8_t index_t;
-	buffers_t buffers;
 	struct next_t {
 		std::uint_fast8_t buffer;
 		bool valid;
 	};
 	std::atomic<next_t> next;
+	buffers_t buffers;
 	index_t write;
 	index_t read;
 };

@@ -186,13 +186,6 @@ cv::Mat eulerAnglesToRotationMatrix(const QVector3D& rotation) {
 	return cv::Mat(matx);
 }
 
-void rotateResult(TrackerResult& result, const QQuaternion& quaternion) {
-	result.pose.rotate(quaternion);
-	auto translation(quaternion.rotatedVector(result.pose.column(3).toVector3D()));
-	result.pose.setColumn(3, QVector4D(translation, 1));
-}
-
-
 
 
 struct CalibrationExpect {
@@ -606,11 +599,12 @@ void VisionVideoFilterRunnable::trackedRobot() {
 
 	auto reading(filter->sensor.reading());
 	if (reading != nullptr) {
-		auto rotation(QVector3D(reading->x(), reading->y(), reading->z()));
-		auto diff(output.rotation - rotation);
-		auto quaternion(QQuaternion::fromEulerAngles(diff));
+		const auto qRotLastGyroToWorld(QQuaternion::fromEulerAngles(output.rotation));
+		const auto qRotCurrGyroToWorld(QQuaternion::fromEulerAngles(QVector3D(reading->x(), reading->y(), reading->z())));
+		const auto qRotGyroLastToCurr(qRotLastGyroToWorld * qRotCurrGyroToWorld.inverted()); // note: quaternions multiply in reverse order than rot. mat.
+		const QMatrix4x4& internal(filter->gyroscopeToCameraTransform);
 
-		rotateResult(filter->robot.result, quaternion);
+		filter->robot.result.pose = internal * QMatrix4x4(qRotGyroLastToCurr.toRotationMatrix()) * internal.inverted() * filter->robot.result.pose;
 	}
 
 	emit filter->robot.changed();
@@ -628,13 +622,12 @@ void VisionVideoFilterRunnable::trackedLandmarks() {
 
 	auto reading(filter->sensor.reading());
 	if (reading != nullptr) {
-		auto rotation(QVector3D(reading->x(), reading->y(), reading->z()));
-		auto diff(output.rotation - rotation);
-		auto quaternion(QQuaternion::fromEulerAngles(diff));
-
-		for (auto landmark : filter->landmarks) {
-			rotateResult(landmark->result, quaternion);
-		}
+		const auto qRotLastGyroToWorld(QQuaternion::fromEulerAngles(output.rotation));
+		const auto qRotCurrGyroToWorld(QQuaternion::fromEulerAngles(QVector3D(reading->x(), reading->y(), reading->z())));
+		const auto qRotGyroLastToCurr(qRotLastGyroToWorld * qRotCurrGyroToWorld.inverted()); // note: quaternions multiply in reverse order than rot. mat.
+		const QMatrix4x4& internal(filter->gyroscopeToCameraTransform);
+		for (auto landmark : filter->landmarks)
+			landmark->result.pose = internal * QMatrix4x4(qRotGyroLastToCurr.toRotationMatrix()) * internal.inverted() * landmark->result.pose;
 	}
 
 	for (auto landmark : filter->landmarks) {

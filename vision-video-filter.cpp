@@ -143,7 +143,7 @@ static cv::ColorConversionCodes getCvtCode(QVideoFrame::PixelFormat pixelFormat)
 		// no conversion: just take the Y
 		return cv::COLOR_COLORCVT_MAX;
 	case QVideoFrame::Format_NV12:
-		return cv::COLOR_YUV2GRAY_NV12;
+		return cv::COLOR_COLORCVT_MAX;
 	default:
 		qCritical() << pixelFormat;
 		qFatal("unknown pixel format");

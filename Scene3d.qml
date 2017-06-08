@@ -9,6 +9,7 @@ Item {
 	property matrix4x4 robotPose
 	property matrix4x4 lens
 	property matrix4x4 camera
+	property bool drawRobot: false
 	Scene3D {
 		x: cameraRect.x
 		y: cameraRect.y
@@ -36,6 +37,7 @@ Item {
 
 			// draw a transparent robot at the pose of the actual robot
 			Entity {
+				enabled: drawRobot
 				components: [
 					Mesh {
 						meshName: "alphaThymio"

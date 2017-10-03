@@ -1,7 +1,3 @@
-[submodule "thymio-vpl2"]
-	path = thymio-vpl2
-	url = https://github.com/aseba-community/thymio-vpl2.git
-	branch = master
 [submodule "thymio-tracker"]
 	path = thymio-tracker
 	url = https://github.com/aseba-community/thymio-tracker.git

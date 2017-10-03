@@ -75,5 +75,3 @@ RESOURCES += $$PWD/thymio-ar.qrc
 DEPENDPATH += $$OPENCV_INCLUDE $$EIGEN_INCLUDE
 INCLUDEPATH += $$OPENCV_INCLUDE $$EIGEN_INCLUDE
 LIBS += $$OPENCV_LIBS
-
-include(thymio-vpl2/thymio-vpl2.pri)

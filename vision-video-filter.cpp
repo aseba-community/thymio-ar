@@ -31,7 +31,7 @@ const auto NaN(std::numeric_limits<double>::quiet_NaN());
 template<typename T>
 class TripleBuffer {
 public:
-	TripleBuffer(): buffers(), next(next_t{0, false}), write(1), read(2) {}
+	TripleBuffer(): next(next_t{0, false}), buffers(), write(1), read(2) {}
 
 	T& writeBuffer() {
 		return buffers[write];
